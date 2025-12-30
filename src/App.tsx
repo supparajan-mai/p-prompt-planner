@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 
 // --- การตั้งค่าทั่วไป ---
-const apiKey = ""; // ใส่ Gemini API Key เพื่อคุยกับ AI
+const apiKey = ""; // ระบบจะจัดการ API Key ให้เองที่นี่
 const GOOGLE_SHEET_ID = '1LC1mBr7ZtAFamAf9zpqT20Cp5g8ySTx5XY1n_14HDDU'; 
 
 // --- ประเภทข้อมูล ---
@@ -99,15 +99,21 @@ const App = () => {
   };
 
   const handleHealthSubmit = async () => {
-    if (!mood) return;
+    if (!mood || !healthStory) return;
     setIsAnalyzing(true);
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-    const prompt = `คุณคือ "พี่พร้อม" ผู้ช่วยรุ่นพี่พัฒนากร ใจดี อบอุ่น น้องบอกอารมณ์ ${mood}/5 และเจอเรื่องมาว่า "${healthStory}" ช่วยให้กำลังใจสั้นๆ 2 ประโยค ตบท้ายด้วย emoji`;
+    const prompt = `คุณคือ "พี่พร้อม" ผู้ช่วยรุ่นพี่พัฒนากรสุราษฎร์ธานี ใจดี อบอุ่น น้องบอกอารมณ์ความรู้สึกระดับ ${mood}/5 และระบายเรื่องราวมาว่า "${healthStory}" ช่วยตอบให้กำลังใจสั้นๆ 2 ประโยค ตบท้ายด้วย emoji`;
     try {
-      const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) });
+      const response = await fetch(url, { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) 
+      });
       const res = await response.json();
       setAiResponse(res.candidates?.[0]?.content?.parts?.[0]?.text || "พี่พร้อมอยู่ข้างๆ เสมอครับ!");
-    } catch { setAiResponse("พี่พร้อมส่งใจให้นะครับพี่ สู้ๆ! ❤️"); }
+    } catch { 
+      setAiResponse("พี่พร้อมส่งใจให้นะครับพี่ สู้ๆ! ❤️"); 
+    }
     setIsAnalyzing(false);
     setHealthStory('');
     setMood(null);
@@ -138,7 +144,7 @@ const App = () => {
     if (type === 'event') setEvents(events.filter(e => e.id !== id));
   };
 
-  // --- View Renders ---
+  // --- ส่วนแสดงผลหน้าจอ (Sub-Views) ---
   const renderWorkView = () => (
     <div className="p-4 space-y-6 animate-fade-in pb-24">
       <section>
@@ -149,9 +155,7 @@ const App = () => {
               <div key={e.id} className="bg-white p-3 rounded-xl border border-gray-100 flex justify-between items-center shadow-sm border-l-4 border-l-orange-500">
                 <div className="flex-1">
                   <p className="font-bold text-sm text-gray-800">{e.title}</p>
-                  <p className="text-[10px] text-gray-500 flex items-center gap-1 font-bold uppercase">
-                    <Clock size={10}/> {e.startTime}{e.endTime ? ` - ${e.endTime}` : ''} | {e.date}
-                  </p>
+                  <p className="text-[10px] text-gray-500 flex items-center gap-1 font-bold uppercase"><Clock size={10}/> {e.startTime}{e.endTime ? ` - ${e.endTime}` : ''} | {e.date}</p>
                 </div>
                 <button onClick={() => deleteItem('event', e.id)} className="text-gray-300 hover:text-red-500 p-1 transition-colors"><Trash2 size={14}/></button>
               </div>
@@ -167,7 +171,7 @@ const App = () => {
             <div key={p.id} className="min-w-[220px] bg-gray-900 text-white p-4 rounded-2xl relative shadow-lg group">
               <button onClick={() => deleteItem('project', p.id)} className="absolute top-2 right-2 text-white/20 hover:text-red-400 transition-colors"><X size={14}/></button>
               <span className="text-[9px] bg-orange-500 px-2 py-0.5 rounded-full font-bold">ไตรมาส {p.quarter || '-'}</span>
-              <h4 className="font-bold text-sm truncate mt-1">{p.name}</h4>
+              <h4 className="font-bold text-sm truncate mt-1 tracking-tight">{p.name}</h4>
               <p className="text-[10px] text-gray-400 mb-3 flex items-center gap-1"><MapPin size={10}/> {p.targetArea || 'ในพื้นที่'}</p>
               <div className="flex justify-between items-end mb-1">
                  <span className="text-[10px] text-gray-400 font-bold uppercase tracking-tight">งบ: ฿{p.budget?.toLocaleString()}</span>
@@ -175,7 +179,7 @@ const App = () => {
               <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden"><div className="bg-orange-500 h-full w-[0%]"></div></div>
             </div>
           ))}
-          <button onClick={() => { setAddType('project'); setShowAddModal(true); }} className="min-w-[120px] border-2 border-dashed border-gray-300 rounded-2xl flex flex-col items-center justify-center text-gray-400 hover:border-orange-500 hover:bg-white transition-all bg-gray-50"><Plus size={24}/><span className="text-[10px] font-black mt-1 uppercase">เพิ่มโครงการ</span></button>
+          <button onClick={() => { setAddType('project'); setShowAddModal(true); }} className="min-w-[120px] border-2 border-dashed border-gray-300 rounded-2xl flex flex-col items-center justify-center text-gray-400 hover:border-orange-500 hover:bg-white transition-all bg-gray-50"><Plus size={24}/><span className="text-[10px] font-black mt-1 uppercase tracking-widest">เพิ่มโครงการ</span></button>
         </div>
       </section>
 
@@ -188,7 +192,7 @@ const App = () => {
               <div className="flex-1">
                 <span className={`text-sm block ${t.completed ? 'line-through text-gray-300' : 'text-gray-800 font-bold'}`}>{t.text}</span>
                 <div className="flex items-center gap-2 mt-0.5">
-                   <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-black uppercase ${t.priority === 'ด่วนมาก' ? 'bg-red-50 text-red-500' : t.priority === 'ด่วน' ? 'bg-orange-50 text-orange-500' : 'bg-green-50 text-green-500'}`}>{t.priority}</span>
+                   <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-black uppercase ${t.priority === 'ด่วนมาก' ? 'bg-red-50 text-red-500 border border-red-100' : t.priority === 'ด่วน' ? 'bg-orange-50 text-orange-500 border border-orange-100' : 'bg-green-50 text-green-500 border border-green-100'}`}>{t.priority}</span>
                    {t.deadline && <span className="text-[8px] text-gray-400 font-bold uppercase tracking-tight"><Clock size={8} className="inline mr-1"/>Due: {t.deadline}</span>}
                 </div>
               </div>
@@ -212,7 +216,7 @@ const App = () => {
           <p className="text-[11px] text-gray-700 line-clamp-6 leading-relaxed font-medium flex-1">{m.content}</p>
         </div>
       ))}
-      <button onClick={() => { setAddType('memo'); setShowAddModal(true); }} className="border-2 border-dashed border-gray-200 rounded-3xl p-4 flex flex-col items-center justify-center text-gray-400 h-48 hover:bg-white transition-all bg-gray-50"><Plus size={32}/><span className="text-[10px] font-black mt-1 uppercase">โน้ตใหม่</span></button>
+      <button onClick={() => { setAddType('memo'); setShowAddModal(true); }} className="border-2 border-dashed border-gray-200 rounded-3xl p-4 flex flex-col items-center justify-center text-gray-400 h-48 hover:bg-white transition-all bg-gray-50"><Plus size={32}/><span className="text-[10px] font-black mt-1 uppercase tracking-widest">โน้ตใหม่</span></button>
     </div>
   );
 
@@ -222,7 +226,7 @@ const App = () => {
       <div className="p-4 space-y-6 pb-24 animate-fade-in">
         <div className="bg-gray-900 text-white p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full -mr-16 -mt-16 blur-3xl"></div>
-          <p className="text-[10px] text-gray-400 mb-2 uppercase tracking-[0.2em] font-black tracking-widest">Community Wallet Balance</p>
+          <p className="text-[10px] text-gray-400 mb-2 uppercase tracking-[0.2em] font-black tracking-widest">Community Planner Balance</p>
           <h2 className="text-4xl font-black flex items-center gap-2 tracking-tighter">฿ {balance.toLocaleString()} <Wallet className="text-orange-500" size={24}/></h2>
           <div className="flex gap-4 mt-8">
              <div className="flex-1 bg-white/5 p-3 rounded-2xl border border-white/10">
@@ -280,6 +284,14 @@ const App = () => {
             {isAnalyzing ? <><Sparkles className="animate-spin" size={18}/> กำลังรับฟัง...</> : <><Send size={18}/> ส่งเรื่องราวให้พี่พร้อม</>}
           </button>
         </section>
+
+        {aiResponse && (
+          <div className="bg-indigo-600 text-white p-6 rounded-[2rem] shadow-xl animate-slide-up relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-4 opacity-10"><MessageCircle size={100}/></div>
+            <h4 className="font-black text-[10px] mb-2 uppercase flex items-center gap-1 opacity-80 tracking-widest"><Sparkles size={12}/> Message from P'Prompt</h4>
+            <p className="text-sm font-bold leading-relaxed">"{String(aiResponse)}"</p>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-4">
           <div className="bg-blue-600 text-white p-5 rounded-[2.5rem] shadow-lg relative overflow-hidden group">
@@ -361,7 +373,7 @@ const App = () => {
         <Users size={80} className="mb-6 animate-bounce" />
         <h1 className="text-4xl font-black mb-2 tracking-tight uppercase">พี่พร้อม</h1>
         <p className="mb-12 opacity-80 text-center font-medium">"เพื่อนคู่คิด ไปไหนไปกัน"</p>
-        <button onClick={() => { setIsLoggedIn(true); localStorage.setItem('p_prompt_login', 'true'); }} className="bg-black text-white px-10 py-5 rounded-[2rem] font-black w-full max-w-xs shadow-2xl active:scale-95 transition-all text-lg tracking-tight mt-12">เข้าสู่ระบบพี่พร้อม</button>
+        <button onClick={() => { setIsLoggedIn(true); localStorage.setItem('p_prompt_login', 'true'); }} className="bg-black text-white px-10 py-5 rounded-[2rem] font-black w-full max-w-xs shadow-2xl active:scale-95 transition-all text-lg tracking-tight uppercase tracking-widest mt-12">เข้าสู่ระบบพี่พร้อม</button>
         
         {/* Footer Text */}
         <p className="absolute bottom-10 text-[10px] opacity-60 font-medium tracking-tight">Version 1.0 ของขวัญปีใหม่แด่ชาว พช.สุราษฎร์</p>
@@ -371,7 +383,7 @@ const App = () => {
 
   return (
     <div className="bg-gray-50 min-h-screen max-w-md mx-auto relative shadow-2xl border-x border-gray-100 font-sans text-gray-900 overflow-hidden">
-      {/* Header */}
+      {/* Header - โลโก้คนกอดคอกัน */}
       <div className="bg-white/95 backdrop-blur-md p-4 flex justify-between items-center sticky top-0 z-40 border-b border-gray-100 shadow-sm">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 bg-orange-500 rounded-full flex items-center justify-center text-white border-2 border-white shadow-sm ring-2 ring-orange-100">
@@ -401,7 +413,7 @@ const App = () => {
         <button onClick={() => setActiveTab('health')} className={`flex flex-col items-center flex-1 transition-all ${activeTab === 'health' ? 'text-orange-600 scale-110 font-bold' : 'text-gray-300'}`}><Activity size={22}/><span className="text-[9px] mt-1 font-black uppercase tracking-widest font-bold tracking-tight">สุขภาพ</span></button>
       </div>
 
-      {/* Add Modal - แก้ไขเรื่องวันที่ในฟอร์มป้อนข้อมูล */}
+      {/* Add Modal - ปรับปรุงปุ่มและลบวันที่ */}
       {showAddModal && (
         <div 
           className="fixed inset-0 bg-black/70 z-[100] flex items-end animate-fade-in p-4"
@@ -412,14 +424,14 @@ const App = () => {
             onClick={e => e.stopPropagation()}
           >
             <div className="flex justify-between items-center mb-8">
-              <h3 className="font-black text-xl uppercase tracking-widest tracking-tighter uppercase">เพิ่ม {
+              <h3 className="font-black text-xl uppercase tracking-widest tracking-tighter uppercase">เพิ่มรายการ {
                 addType === 'event' ? 'นัด' : addType === 'task' ? 'งาน' : addType === 'project' ? 'โครงการ' : addType === 'memo' ? 'โน้ต' : 'บัญชี'
               }</h3>
               <button onClick={() => setShowAddModal(false)} className="p-2 bg-gray-50 rounded-full hover:bg-gray-100 transition-all"><X size={20}/></button>
             </div>
             
             <div className="space-y-6">
-              {/* ปุ่มเมนูสีส้มตัวใหญ่ */}
+              {/* ปุ่มเลือกเมนูสีส้มตัวใหญ่ */}
               <div className="flex bg-gray-100 p-1.5 rounded-2xl overflow-x-auto scrollbar-hide gap-1">
                 {['event', 'task', 'project', 'memo', 'transaction'].map((t: any) => (
                    <button 
@@ -461,9 +473,9 @@ const App = () => {
                   </div>
                 )}
 
-                {/* --- กำจัดวันที่: โชว์แค่ตอนเป็น 'นัด' หรือ 'งาน' เท่านั้น --- */}
+                {/* --- กำจัดวันที่: โชว์แค่ตอน นัดหมาย และ งาน เท่านั้น --- */}
                 {(addType === 'event' || addType === 'task') && (
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 animate-fade-in">
                     <div className="flex-1">
                         <p className="text-[10px] font-black text-gray-400 mb-1 ml-2 uppercase">วันที่</p>
                         <input type="date" value={formData.date || ''} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-orange-200 font-bold text-sm"/>
@@ -501,6 +513,7 @@ const App = () => {
         </div>
       )}
 
+      {/* Welcome Popup */}
       {showWelcomeQuote && (
         <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-8 animate-fade-in" onClick={() => setShowWelcomeQuote(false)}>
           <div className="bg-white p-10 rounded-[3.5rem] text-center shadow-2xl relative overflow-hidden max-w-sm w-full animate-scale-in" onClick={e => e.stopPropagation()}>
@@ -528,7 +541,7 @@ const App = () => {
                               <h2 className="text-5xl font-black tracking-tighter">88<span className="text-lg opacity-60">/100</span></h2>
                           </div>
                       </div>
-                      <div className="bg-gray-50 p-6 rounded-[2.5rem] border border-gray-100 text-center">
+                      <div className="bg-gray-50 p-6 rounded-[2.5rem] border border-gray-100">
                          <p className="font-black text-sm text-gray-800 uppercase mb-2">You are doing great!</p>
                          <p className="text-xs text-gray-500">รักษาระดับการดื่มน้ำและก้าวเดินไว้นะครับพี่ รอยยิ้มของพี่คือพลังของชาวบ้าน!</p>
                       </div>
