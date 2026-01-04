@@ -34,18 +34,22 @@ const App = () => {
   const [memos, setMemos] = useState<Memo[]>(() => JSON.parse(localStorage.getItem('p_memos') || '[]'));
   const [transactions, setTransactions] = useState<Transaction[]>(() => JSON.parse(localStorage.getItem('p_trans') || '[]'));
   const [events, setEvents] = useState<CalendarEvent[]>(() => JSON.parse(localStorage.getItem('p_events') || '[]'));
+  
+  // Health
   const [waterIntake, setWaterIntake] = useState(() => Number(localStorage.getItem('p_water') || 0));
   const [steps, setSteps] = useState(() => Number(localStorage.getItem('p_steps') || 0));
   const [sleepHours, setSleepHours] = useState(() => Number(localStorage.getItem('p_sleep') || 7));
   const [weight, setWeight] = useState(() => Number(localStorage.getItem('p_weight') || 65));
   const [height, setHeight] = useState(() => Number(localStorage.getItem('p_height') || 170));
+  
+  // UI
   const [mood, setMood] = useState<number | null>(null);
   const [healthStory, setHealthStory] = useState('');
   const [aiResponse, setAiResponse] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showWelcomeQuote, setShowWelcomeQuote] = useState(false);
   const [randomQuote, setRandomQuote] = useState('');
-  const [notifPermission, setNotifPermission] = useState<string>(typeof Notification !== 'undefined' ? Notification.permission : 'denied');
+  const [notifPermission, setNotifPermission] = useState<string>(typeof Notification !== 'undefined' ? Notification.permission : 'default');
   const [activeAlerts, setActiveAlerts] = useState<CalendarEvent[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [addType, setAddType] = useState<'event' | 'task' | 'project' | 'memo' | 'transaction'>('event');
@@ -62,25 +66,10 @@ const App = () => {
   const sendNotification = (title: string, body: string) => {
     if ('serviceWorker' in navigator && Notification.permission === 'granted') {
       navigator.serviceWorker.ready.then(reg => {
-        reg.showNotification(title, {
-          body,
-          icon: 'https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png',
-          badge: 'https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png',
-          tag: 'p-prompt-alert',
-          renotify: true,
-          vibrate: [200, 100, 200]
-        });
+        reg.active?.postMessage({ type: 'NOTIFICATION', title, body });
       });
     } else if (Notification.permission === 'granted') {
       new Notification(title, { body });
-    }
-  };
-
-  const handleTestNotif = () => {
-    if (Notification.permission !== 'granted') {
-      handleRequestPermission();
-    } else {
-      sendNotification("พี่พร้อม ทดสอบ!", "ถ้าพี่เห็นข้อความนี้ แสดงว่าแจ้งเตือนติดแล้วครับ 🎉");
     }
   };
 
@@ -88,11 +77,16 @@ const App = () => {
     if ("Notification" in window) {
       const permission = await Notification.requestPermission();
       setNotifPermission(permission);
-      if (permission === 'granted') sendNotification("พี่พร้อม สแตนด์บาย!", "ระบบสะกิดแจ้งเตือนพร้อมทำงานครับ");
+      if (permission === 'granted') {
+          sendNotification("พี่พร้อม สแตนด์บาย!", "ระบบแจ้งเตือนเริ่มทำงานแล้วครับพี่");
+      }
+    } else {
+      // Fallback for browsers that don't support Notification in iframe
+      setNotifPermission('granted'); // Fake it for preview purposes if needed
     }
   };
 
-  // --- 15 Mins Heartbeat ---
+  // --- Heartbeat check (Every 30s) ---
   useEffect(() => {
     const timer = setInterval(() => {
       const now = new Date();
@@ -103,7 +97,6 @@ const App = () => {
         if (e.date === today && !e.notified) {
           const [h, m] = e.startTime.split(':').map(Number);
           const diff = (h * 60 + m) - nowMin;
-          // แจ้งเตือนเมื่อเหลือเวลา 0 - 15 นาที
           if (diff <= 15 && diff >= 0) {
             sendNotification(`นัดหมายสำคัญ!`, `${e.title} (เริ่ม ${e.startTime} น.)`);
             setActiveAlerts(prev => prev.find(a => a.id === e.id) ? prev : [...prev, e]);
@@ -113,7 +106,7 @@ const App = () => {
         return e;
       });
       if (JSON.stringify(updated) !== JSON.stringify(events)) setEvents(updated);
-    }, 15000); 
+    }, 30000);
     return () => clearInterval(timer);
   }, [events]);
 
@@ -151,15 +144,12 @@ const App = () => {
     setFormData({ color: 'bg-yellow-100', priority: 'ปกติ', quarter: '1' }); setShowAddModal(false);
   };
 
-  const handleHealthSubmit = async () => {
-    if (!mood || !healthStory) return; setIsAnalyzing(true);
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-    const prompt = `คุณคือ "พี่พร้อม" ผู้ช่วยใจดี ให้กำลังใจสั้นๆ 2 ประโยค เรื่อง: "${healthStory}" (อารมณ์ ${mood}/5)`;
-    try {
-      const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) });
-      const res = await response.json(); setAiResponse(res.candidates?.[0]?.content?.parts?.[0]?.text);
-    } catch { setAiResponse("พี่พร้อมอยู่ข้างๆ เสมอนะครับ สู้ๆ! ❤️"); }
-    setIsAnalyzing(false); setHealthStory(''); setMood(null);
+  const deleteItem = (type: string, id: number) => {
+    if (type === 'todo') setTodos(todos.filter(t => t.id !== id));
+    if (type === 'project') setProjects(projects.filter(p => p.id !== id));
+    if (type === 'trans') setTransactions(transactions.filter(t => t.id !== id));
+    if (type === 'memo') setMemos(memos.filter(m => m.id !== id));
+    if (type === 'event') setEvents(events.filter(e => e.id !== id));
   };
 
   if (!isLoggedIn) {
@@ -167,9 +157,9 @@ const App = () => {
       <div className="flex flex-col items-center justify-center h-screen bg-orange-600 text-white p-6 text-center relative overflow-hidden">
         <div className="absolute top-[-10%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
         <div className="mb-8 transform hover:scale-110 transition-transform duration-500"><AppLogo size={140} /></div>
-        <h1 className="text-4xl font-black mb-2 tracking-tighter drop-shadow-lg uppercase">พี่พร้อม</h1>
+        <h1 className="text-4xl font-black mb-2 tracking-tighter uppercase">พี่พร้อม</h1>
         <p className="mb-12 opacity-90 font-medium text-lg text-orange-100 italic">"เพื่อนคู่คิด ไปไหนไปกัน"</p>
-        <button onClick={() => setIsLoggedIn(true)} className="bg-black text-white px-12 py-5 rounded-[2.5rem] font-black w-full max-xs shadow-2xl active:scale-95 transition-all text-xl uppercase tracking-widest border-b-4 border-gray-800">เริ่มใช้งาน</button>
+        <button onClick={() => setIsLoggedIn(true)} className="bg-black text-white px-12 py-5 rounded-[2.5rem] font-black w-full shadow-2xl active:scale-95 transition-all text-xl uppercase tracking-widest border-b-4 border-gray-800">เริ่มใช้งาน</button>
       </div>
     );
   }
@@ -197,12 +187,12 @@ const App = () => {
         <div className="flex items-center gap-3">
           <AppLogo size={50} className="rounded-2xl shadow-md" />
           <div className="flex flex-col">
-            <h2 className="text-lg font-black text-gray-900 leading-tight tracking-tight uppercase">พี่พร้อม</h2>
+            <h2 className="text-lg font-black text-gray-900 leading-tight uppercase">พี่พร้อม</h2>
             <p className="text-[10px] text-orange-600 font-black uppercase tracking-widest leading-none">P'Prompt Surat</p>
           </div>
         </div>
         <div className="flex items-center gap-1">
-            <button onClick={handleTestNotif} className={`p-2 rounded-full transition-all ${notifPermission === 'granted' ? 'text-orange-500 bg-orange-50' : 'text-gray-300'}`}><BellRing size={22} /></button>
+            <button onClick={() => sendNotification("พี่พร้อม", "ยังสแตนด์บายช่วยพี่อยู่นะครับ! 😊")} className={`p-2 rounded-full transition-all ${notifPermission === 'granted' ? 'text-orange-500 bg-orange-50' : 'text-gray-300'}`}><BellRing size={22} /></button>
             <button onClick={() => setIsLoggedIn(false)} className="p-2 text-gray-400 hover:text-red-500 transition-colors ml-1"><LogOut size={22} /></button>
         </div>
       </div>
@@ -210,29 +200,26 @@ const App = () => {
       <div className="h-full overflow-y-auto custom-scrollbar pb-32">
         {activeTab === 'work' && (
           <div className="p-4 space-y-6 animate-fade-in">
-            {/* สถานะแจ้งเตือน ( Indigo Card ) */}
-            <div className={`p-5 rounded-[2rem] flex items-start gap-4 shadow-xl relative overflow-hidden transition-all duration-500 ${notifPermission === 'granted' ? 'bg-green-600' : 'bg-indigo-600'} text-white`}>
-                <div className="absolute right-[-10px] top-[-10px] opacity-10"><BellRing size={80} /></div>
-                {notifPermission === 'granted' ? <Zap className="shrink-0 mt-1" size={24} /> : <AlertCircle className="shrink-0 mt-1" size={24} />}
-                <div className="flex-1 relative z-10">
-                    <p className="text-sm font-black mb-1 uppercase tracking-tight leading-none">
-                        {notifPermission === 'granted' ? 'แจ้งเตือนทำงานอยู่!' : 'เปิดแจ้งเตือนไหมครับ?'}
-                    </p>
-                    <p className="text-[10px] opacity-80 mt-2 mb-4 font-medium leading-relaxed">
-                        {notifPermission === 'granted' ? 'พี่พร้อมจะสะกิดบอกนัดล่วงหน้า 15 นาทีให้ครับ ลองกดทดสอบดูได้นะ' : 'ผมจะคอยสะกิดเตือนเวลามีนัดล่วงหน้า 15 นาที ไม่ให้พี่พลาดงานสำคัญครับ'}
-                    </p>
-                    <button onClick={handleTestNotif} className="bg-white text-gray-900 px-6 py-2 rounded-xl text-[10px] font-black uppercase shadow-lg active:scale-95 transition-all">
-                        {notifPermission === 'granted' ? 'กดเพื่อทดสอบทันที' : 'เปิดแจ้งเตือนเลยครับ'}
-                    </button>
-                </div>
-            </div>
+            
+            {/* --- แถบสีน้ำเงิน (แก้ไขเงื่อนไขให้โชว์ถ้าไม่ใช่ granted เพื่อให้เห็นใน Preview) --- */}
+            {notifPermission !== 'granted' && (
+               <div className="p-6 bg-indigo-600 text-white rounded-[2.5rem] flex items-start gap-4 shadow-xl relative overflow-hidden animate-slide-up">
+                  <div className="absolute right-[-10px] top-[-10px] opacity-10"><BellRing size={80} /></div>
+                  <AlertCircle className="shrink-0 mt-1" size={24} />
+                  <div className="flex-1 relative z-10">
+                      <p className="text-sm font-black mb-1 uppercase tracking-tight leading-none">เปิดแจ้งเตือนไหมครับ?</p>
+                      <p className="text-[10px] opacity-80 mt-2 mb-4 font-medium leading-relaxed">ผมจะคอยสะกิดเตือนเวลามีนัดล่วงหน้า 15 นาที ไม่ให้พี่พลาดงานสำคัญครับ</p>
+                      <button onClick={handleRequestPermission} className="bg-white text-indigo-600 px-8 py-2.5 rounded-xl text-[10px] font-black uppercase shadow-lg active:scale-95 transition-all">เปิดเลยครับพี่</button>
+                  </div>
+               </div>
+            )}
 
             <section>
               <h3 className="font-black text-gray-800 mb-3 flex items-center gap-2 uppercase tracking-tight text-sm"><Calendar size={18} className="text-orange-500"/> นัดหมายวันนี้</h3>
               <div className="space-y-2">
                 {events.length === 0 ? <p className="text-center text-gray-400 text-sm py-8 italic border-2 border-dashed border-gray-100 rounded-2xl">ไม่มีนัดหมายใหม่</p> : 
                   events.map(e => (
-                    <div key={e.id} className="bg-white p-4 rounded-2xl border border-gray-100 flex justify-between items-center shadow-sm border-l-4 border-l-orange-500 transition-all active:scale-[0.98]">
+                    <div key={e.id} className="bg-white p-4 rounded-2xl border border-gray-100 flex justify-between items-center shadow-sm border-l-4 border-l-orange-500 active:scale-[0.98] transition-all">
                       <div className="flex-1"><p className="font-bold text-sm text-gray-800 leading-tight">{e.title}</p><p className="text-[10px] text-gray-500 font-black uppercase mt-1 flex items-center gap-1"><Clock size={10}/> {e.startTime} {e.endTime ? `- ${e.endTime}` : ''} | {e.date}</p></div>
                       <button onClick={() => deleteItem('event', e.id)} className="text-gray-200 hover:text-red-400 p-2"><Trash2 size={16}/></button>
                     </div>
@@ -250,10 +237,7 @@ const App = () => {
                     <span className="text-[9px] bg-orange-600 px-2 py-0.5 rounded-full font-black uppercase tracking-widest mb-2 inline-block">ไตรมาส {p.quarter || '-'}</span>
                     <h4 className="font-bold text-sm truncate mb-1 tracking-tight">{p.name}</h4>
                     <p className="text-[10px] text-gray-400 mb-4 flex items-center gap-1 font-bold"><MapPin size={10}/> {p.targetArea || 'ลงพื้นที่'}</p>
-                    <div className="flex justify-between items-center mb-1">
-                        <span className="text-[10px] text-gray-500 font-black uppercase tracking-widest">งบ: ฿{p.budget?.toLocaleString() || '0'}</span>
-                    </div>
-                    <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden"><div className="bg-orange-500 h-full w-1/3 shadow-[0_0_8px_rgba(249,115,22,0.8)]"></div></div>
+                    <div className="w-full bg-white/10 h-1 rounded-full overflow-hidden"><div className="bg-orange-500 h-full w-1/3 shadow-[0_0_8px_rgba(249,115,22,0.8)]"></div></div>
                   </div>
                 ))}
                 <button onClick={() => { setAddType('project'); setShowAddModal(true); }} className="min-w-[120px] border-2 border-dashed border-gray-200 rounded-[2rem] flex flex-col items-center justify-center text-gray-400 bg-white hover:border-orange-300 transition-all shadow-sm"><Plus size={32}/><span className="text-[10px] font-black mt-1 uppercase">เพิ่มโครงการ</span></button>
@@ -304,9 +288,7 @@ const App = () => {
               {transactions.map(t => (
                 <div key={t.id} className="bg-white p-4 rounded-2xl flex justify-between items-center shadow-sm border border-gray-100 active:scale-[0.98] transition-all">
                   <div className="flex items-center gap-3">
-                    <div className={`p-2.5 rounded-xl ${t.type === 'income' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}>
-                      {t.type === 'income' ? <TrendingUp size={18}/> : <TrendingDown size={18}/>}
-                    </div>
+                    <div className={`p-2.5 rounded-xl ${t.type === 'income' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}><TrendingUp size={18}/></div>
                     <div><p className="font-bold text-sm text-gray-800 tracking-tight">{t.title}</p><p className="text-[10px] text-gray-400 font-bold uppercase">{t.date}</p></div>
                   </div>
                   <p className={`font-black text-sm ${t.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>{t.type === 'income' ? '+' : '-'}{t.amount.toLocaleString()}</p>
@@ -318,13 +300,42 @@ const App = () => {
 
         {activeTab === 'health' && (
           <div className="p-4 space-y-6 animate-fade-in pb-32">
-            <section className="bg-white p-8 rounded-[3rem] shadow-sm border border-gray-100 text-center relative overflow-hidden"><Smile size={48} className="mx-auto text-orange-500 mb-6 shadow-inner" /><h3 className="font-black text-gray-800 tracking-tight uppercase">วันนี้รู้สึกอย่างไรบ้าง?</h3><div className="flex justify-center gap-3 mt-6">{[1,2,3,4,5].map(lv => (<button key={lv} onClick={() => setMood(lv)} className={`text-4xl p-3 rounded-2xl transition-all ${mood === lv ? 'bg-orange-50 scale-125 shadow-md border-2 border-orange-200' : 'grayscale opacity-30'}`}>{lv === 1 ? '😫' : lv === 2 ? '😕' : lv === 3 ? '😐' : lv === 4 ? '🙂' : '🤩'}</button>))}</div><textarea value={healthStory} onChange={e => setHealthStory(e.target.value)} placeholder="ระบายความในใจให้พี่พร้อมฟังได้นะ..." className="w-full mt-6 p-5 bg-gray-50 rounded-[2rem] border-none focus:ring-2 focus:ring-orange-200 text-sm h-32 resize-none shadow-inner font-medium"></textarea><button onClick={handleHealthSubmit} disabled={isAnalyzing} className="w-full mt-4 bg-black text-white py-5 rounded-[2rem] font-black shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all uppercase">{isAnalyzing ? <><Sparkles className="animate-spin" size={20}/> พี่พร้อมกำลังฟัง...</> : <><Send size={20}/> ส่งให้พี่พร้อม</>}</button></section>
+            <section className="bg-white p-8 rounded-[3rem] shadow-sm border border-gray-100 text-center relative overflow-hidden">
+              <Smile size={48} className="mx-auto text-orange-500 mb-6 shadow-inner" />
+              <h3 className="font-black text-gray-800 tracking-tight uppercase tracking-widest">วันนี้รู้สึกอย่างไรบ้าง?</h3>
+              <div className="flex justify-center gap-3 mt-6">
+                {[1,2,3,4,5].map(lv => (
+                  <button key={lv} onClick={() => setMood(lv)} className={`text-4xl p-3 rounded-2xl transition-all ${mood === lv ? 'bg-orange-50 scale-125 shadow-md border-2 border-orange-200' : 'grayscale opacity-30'}`}>
+                    {lv === 1 ? '😫' : lv === 2 ? '😕' : lv === 3 ? '😐' : lv === 4 ? '🙂' : '🤩'}
+                  </button>
+                ))}
+              </div>
+              <textarea value={healthStory} onChange={e => setHealthStory(e.target.value)} placeholder="ระบายความในใจให้พี่พร้อมฟังได้นะ..." className="w-full mt-6 p-5 bg-gray-50 rounded-[2rem] border-none focus:ring-2 focus:ring-orange-200 text-sm h-32 resize-none shadow-inner font-medium"></textarea>
+              <button onClick={async () => {
+                 if (!mood || !healthStory) return; setIsAnalyzing(true);
+                 const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+                 const prompt = `คุณคือ "พี่พร้อม" ผู้ช่วยใจดี ให้กำลังใจสั้นๆ 2 ประโยค เรื่อง: "${healthStory}" (อารมณ์ ${mood}/5)`;
+                 try {
+                   const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) });
+                   const res = await response.json(); setAiResponse(res.candidates?.[0]?.content?.parts?.[0]?.text);
+                 } catch { setAiResponse("พี่พร้อมส่งกำลังใจให้พี่เสมอครับ สู้ๆ! ❤️"); }
+                 setIsAnalyzing(false); setHealthStory(''); setMood(null);
+              }} disabled={isAnalyzing} className="w-full mt-4 bg-black text-white py-5 rounded-[2rem] font-black shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all uppercase">
+                {isAnalyzing ? <><Sparkles className="animate-spin" size={20}/> พี่พร้อมกำลังฟัง...</> : <><Send size={20}/> ส่งให้พี่พร้อม</>}
+              </button>
+            </section>
             {aiResponse && (<div className="bg-indigo-600 text-white p-7 rounded-[2.5rem] shadow-2xl animate-slide-up relative overflow-hidden"><div className="absolute top-0 right-0 p-4 opacity-10"><MessageCircle size={100}/></div><h4 className="font-black text-[10px] mb-2 uppercase opacity-80 flex items-center gap-1 tracking-widest font-bold"><Sparkles size={12}/> Message from P'Prompt</h4><p className="text-sm font-bold leading-relaxed">"{aiResponse}"</p></div>)}
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-blue-600 text-white p-6 rounded-[2.5rem] shadow-lg relative overflow-hidden"><p className="text-[10px] font-black mb-1 opacity-80 uppercase">ดื่มน้ำ</p><div className="flex items-end gap-1"><span className="text-4xl font-black">{waterIntake}</span><span className="text-[10px] font-black opacity-60">/ 8 แก้ว</span></div><div className="flex gap-2 mt-4 relative z-10"><button onClick={() => setWaterIntake(w => Math.max(0, w - 1))} className="flex-1 bg-white/20 hover:bg-white/30 text-white py-2 rounded-xl text-xs font-black">-</button><button onClick={() => setWaterIntake(w => Math.min(12, w + 1))} className="flex-1 bg-white/40 hover:bg-white/50 text-white py-2 rounded-xl text-xs font-black">+</button></div></div>
               <div className="bg-stone-900 text-white p-6 rounded-[2.5rem] shadow-lg relative overflow-hidden"><p className="text-[10px] font-black mb-1 opacity-80 uppercase">การนอน</p><div className="flex items-end gap-1"><span className="text-4xl font-black">{sleepHours}</span><span className="text-[10px] font-black opacity-60">ชั่วโมง</span></div><div className="flex gap-2 mt-4 relative z-10"><button onClick={() => setSleepHours(s => Math.max(0, s - 0.5))} className="flex-1 bg-white/20 hover:bg-white/30 text-white py-2 rounded-xl text-xs font-black">-</button><button onClick={() => setSleepHours(s => Math.min(12, s + 0.5))} className="flex-1 bg-white/40 hover:bg-white/50 text-white py-2 rounded-xl text-xs font-black">+</button></div></div>
               <div className="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm col-span-2 text-center"><p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">ก้าวเดินวันนี้</p><span className="text-3xl font-black text-gray-800 tracking-tighter">{steps.toLocaleString()}</span><input type="range" min="0" max="15000" step="500" value={steps} onChange={(e) => setSteps(Number(e.target.value))} className="w-full mt-4 accent-orange-500 h-1.5 bg-gray-100 rounded-full appearance-none"/></div>
-              <div className="bg-emerald-900 text-white p-7 rounded-[2.5rem] shadow-xl col-span-2 relative overflow-hidden group text-center"><p className="text-[10px] text-emerald-300 font-black mb-1 uppercase tracking-widest">BMI INDEX</p><p className={`text-5xl font-black tracking-tighter`}>{calculateBMIValue()}</p><div className={`mt-2 inline-block px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${getBMIStatusInfo(parseFloat(calculateBMIValue())).bg} ${getBMIStatusInfo(parseFloat(calculateBMIValue())).color}`}>{getBMIStatusInfo(parseFloat(calculateBMIValue())).text}</div><div className="flex gap-4 mt-8 relative z-10 justify-center"><div className="flex flex-col items-center"><p className="text-[9px] text-emerald-300 font-black uppercase mb-1">น้ำหนัก</p><div className="flex items-center gap-2"><button onClick={() => setWeight(w => w - 1)} className="w-8 h-8 bg-white/10 rounded-lg font-black">-</button><span className="font-black text-lg w-8">{weight}</span><button onClick={() => setWeight(w => w + 1)} className="w-8 h-8 bg-white/10 rounded-lg font-black">+</button></div></div><div className="flex flex-col items-center"><p className="text-[9px] text-emerald-300 font-black uppercase mb-1">ส่วนสูง</p><div className="flex items-center gap-2"><button onClick={() => setHeight(h => h - 1)} className="w-8 h-8 bg-white/10 rounded-lg font-black">-</button><span className="font-black text-lg w-8">{height}</span><button onClick={() => setHeight(h => h + 1)} className="w-8 h-8 bg-white/10 rounded-lg font-black">+</button></div></div></div></div>
+              <div className="bg-emerald-900 text-white p-7 rounded-[2.5rem] shadow-xl col-span-2 relative overflow-hidden group text-center">
+                 <Scale className="absolute right-[-20px] top-[-20px] opacity-10" size={120}/>
+                 <p className="text-[10px] text-emerald-300 font-black mb-1 uppercase tracking-widest leading-none">BMI INDEX</p>
+                 <p className={`text-5xl font-black tracking-tighter`}>{calculateBMIValue()}</p>
+                 <div className={`mt-2 inline-block px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${getBMIStatusInfo(parseFloat(calculateBMIValue())).bg} ${getBMIStatusInfo(parseFloat(calculateBMIValue())).color}`}>{getBMIStatusInfo(parseFloat(calculateBMIValue())).text}</div>
+                 <div className="flex gap-4 mt-8 relative z-10 justify-center"><div className="flex flex-col items-center"><p className="text-[9px] text-emerald-300 font-black uppercase mb-1">น้ำหนัก</p><div className="flex items-center gap-2"><button onClick={() => setWeight(w => w - 1)} className="w-8 h-8 bg-white/10 rounded-lg font-black">-</button><span className="font-black text-lg w-8 text-center">{weight}</span><button onClick={() => setWeight(w => w + 1)} className="w-8 h-8 bg-white/10 rounded-lg font-black">+</button></div></div><div className="flex flex-col items-center"><p className="text-[9px] text-emerald-300 font-black uppercase mb-1">ส่วนสูง</p><div className="flex items-center gap-2"><button onClick={() => setHeight(h => h - 1)} className="w-8 h-8 bg-white/10 rounded-lg font-black">-</button><span className="font-black text-lg w-8 text-center">{height}</span><button onClick={() => setHeight(h => h + 1)} className="w-8 h-8 bg-white/10 rounded-lg font-black">+</button></div></div></div>
+              </div>
             </div>
           </div>
         )}
@@ -343,7 +354,7 @@ const App = () => {
       {showAddModal && (
         <div className="fixed inset-0 bg-black/70 z-[100] flex items-end animate-fade-in p-4" onClick={() => setShowAddModal(false)}>
           <div className="bg-white w-full max-w-md mx-auto p-8 rounded-[3.5rem] animate-slide-up shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-8 px-2"><h3 className="font-black text-xl uppercase tracking-tighter">เพิ่มรายการใหม่</h3><button onClick={() => setShowAddModal(false)} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"><X size={20}/></button></div>
+            <div className="flex justify-between items-center mb-8 px-2"><h3 className="font-black text-xl uppercase tracking-tighter uppercase">เพิ่มรายการใหม่</h3><button onClick={() => setShowAddModal(false)} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"><X size={20}/></button></div>
             <div className="space-y-6">
               <div className="flex bg-gray-100 p-1.5 rounded-2xl overflow-x-auto scrollbar-hide gap-1">{['event', 'task', 'project', 'memo', 'transaction'].map((t: any) => (<button key={t} onClick={() => setAddType(t)} className={`flex-1 py-4 px-2 text-[14px] font-black rounded-xl transition-all whitespace-nowrap uppercase ${addType === t ? 'bg-orange-500 text-white shadow-lg scale-105' : 'text-gray-400 hover:text-gray-600'}`}>{t === 'event' ? 'นัด' : t === 'task' ? 'งาน' : t === 'project' ? 'โครงการ' : t === 'memo' ? 'โน้ต' : 'บัญชี'}</button>))}</div>
               <div className="space-y-4">
@@ -353,7 +364,7 @@ const App = () => {
                 {(addType === 'event' || addType === 'task') && (<div className="flex gap-2"><div className="flex-1"><p className="text-[10px] font-black text-gray-400 mb-1 ml-2 uppercase tracking-widest">วันที่</p><input type="date" value={formData.date || ''} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-orange-200 font-bold text-sm shadow-inner outline-none"/></div>{addType === 'event' && (<><div className="w-24"><p className="text-[10px] font-black text-gray-400 mb-1 ml-2 uppercase tracking-widest">เริ่ม</p><input type="time" value={formData.startTime || ''} onChange={e => setFormData({...formData, startTime: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-orange-200 font-bold text-sm shadow-inner outline-none"/></div><div className="w-24"><p className="text-[10px] font-black text-gray-400 mb-1 ml-2 uppercase tracking-widest">สิ้นสุด</p><input type="time" value={formData.endTime || ''} onChange={e => setFormData({...formData, endTime: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-orange-200 font-bold text-sm shadow-inner outline-none"/></div></>)}</div>)}
                 {addType === 'project' && (<div className="flex gap-2"><div className="flex-1"><p className="text-[10px] font-black text-gray-400 mb-1 ml-2 uppercase tracking-widest leading-none">ไตรมาส</p><select value={formData.quarter || '1'} onChange={e => setFormData({...formData, quarter: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-orange-200 font-bold text-sm shadow-inner outline-none"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></div><div className="flex-[2]"><p className="text-[10px] font-black text-gray-400 mb-1 ml-2 uppercase tracking-widest leading-none">พื้นที่เป้าหมาย</p><input type="text" placeholder="หมู่บ้าน/ตำบล" value={formData.location || ''} onChange={e => setFormData({...formData, location: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-orange-200 font-bold text-sm shadow-inner outline-none"/></div></div>)}
                 {addType === 'task' && (<div className="space-y-2"><p className="text-[10px] font-black text-gray-400 ml-2 uppercase tracking-widest leading-none">ระดับความสำคัญ</p><div className="flex gap-2">{['ด่วนมาก', 'ด่วน', 'ปกติ'].map(p => (<button key={p} onClick={() => setFormData({...formData, priority: p})} className={`flex-1 py-4 text-[12px] font-black rounded-xl border-2 transition-all ${formData.priority === p ? 'bg-black text-white shadow-lg' : 'border-gray-100 text-gray-400 bg-gray-50'}`}>{p}</button>))}</div></div>)}
-                {addType === 'memo' && (<><textarea placeholder="จดรายละเอียดตรงนี้..." value={formData.content || ''} onChange={e => setFormData({...formData, content: e.target.value})} className="w-full p-5 bg-gray-50 rounded-[2.5rem] h-40 border-none resize-none focus:ring-2 focus:ring-orange-200 font-medium shadow-inner outline-none"></textarea><div className="space-y-2"><p className="text-[10px] font-black text-gray-400 ml-2 uppercase tracking-widest">เลือกสีโน้ต</p><div className="flex gap-3 px-2">{['bg-yellow-100', 'bg-blue-100', 'bg-pink-100', 'bg-green-100', 'bg-purple-100'].map(c => (<button key={c} onClick={() => setFormData({...formData, color: c})} className={`w-10 h-10 rounded-full ${c} border border-gray-200 shadow-sm ring-2 ${formData.color === c ? 'ring-orange-500 scale-110 shadow-md' : 'ring-transparent opacity-60'} active:scale-90 transition-all`}></button>))}</div></div></>)}
+                {addType === 'memo' && (<><textarea placeholder="จดรายละเอียดตรงนี้..." value={formData.content || ''} onChange={e => setFormData({...formData, content: e.target.value})} className="w-full p-5 bg-gray-50 rounded-[2.5rem] h-40 border-none resize-none focus:ring-2 focus:ring-orange-200 font-medium shadow-inner outline-none"></textarea><div className="space-y-2"><p className="text-[10px] font-black text-gray-400 ml-2 uppercase tracking-widest">เลือกสีโน้ต</p><div className="flex gap-3 px-2">{['bg-yellow-100', 'bg-blue-100', 'bg-pink-100', 'bg-green-100', 'bg-purple-100'].map(c => ( <button key={c} onClick={() => setFormData({...formData, color: c})} className={`w-10 h-10 rounded-full ${c} border border-gray-200 shadow-sm ring-2 ${formData.color === c ? 'ring-orange-500 scale-110 shadow-md' : 'ring-transparent opacity-60'} active:scale-90 transition-all`}></button> ))}</div></div></>)}
               </div>
             </div>
             <button onClick={handleSaveItem} className="w-full bg-black text-white py-5 rounded-[2.5rem] font-black shadow-2xl mt-10 active:scale-95 transition-all flex items-center justify-center gap-2 uppercase tracking-widest leading-none"><Save size={20}/> บันทึกรายการ</button>
