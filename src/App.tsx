@@ -3,11 +3,11 @@ import {
   Calendar, CheckSquare, Activity, Smile, Plus, Droplets, Moon, Coffee, Briefcase, Mail, Bell, LogOut, MapPin, Users, FileText, Wallet, TrendingUp, TrendingDown, Heart, X, Clock, Save, Map, Navigation, StickyNote, PenTool, Search, MoreVertical, Target, ChevronRight, Trash2, PieChart, Info, DollarSign, Sparkles, MessageCircle, Send, Footprints, Scale, BarChart2, Phone, User, MessageSquare, Laugh, AlertCircle, BellRing
 } from 'lucide-react';
 
-// --- การตั้งค่า (Configuration) ---
+// --- Configuration ---
 const apiKey = ""; 
 const GOOGLE_SHEET_ID = '1LC1mBr7ZtAFamAf9zpqT20Cp5g8ySTx5XY1n_14HDDU'; 
 
-// --- ส่วนประกอบโลโก้คนคู่ (App Logo Component) ---
+// --- Logo Component (2 People - เพื่อนคู่คิด) ---
 const AppLogo = ({ size = 80, className = "" }: { size?: number, className?: string }) => {
   return (
     <div 
@@ -24,7 +24,7 @@ const AppLogo = ({ size = 80, className = "" }: { size?: number, className?: str
   );
 };
 
-// --- ประเภทข้อมูล (Types) ---
+// --- Types ---
 interface Todo { id: number; text: string; priority: 'ด่วนมาก' | 'ด่วน' | 'ปกติ'; completed: boolean; deadline?: string; notified?: boolean; }
 interface ProjectTask { id: number; text: string; completed: boolean; }
 interface Project { id: number; name: string; targetArea?: string; quarter?: string; budget?: number; note?: string; }
@@ -38,14 +38,14 @@ const App = () => {
   const [activeTab, setActiveTab] = useState<'work' | 'memo' | 'finance' | 'health'>('work');
   const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem('p_prompt_login') === 'true');
 
-  // --- ข้อมูลในเครื่อง (Local Storage 100%) ---
+  // --- Persistent State ---
   const [todos, setTodos] = useState<Todo[]>(() => JSON.parse(localStorage.getItem('p_todos') || '[]'));
   const [projects, setProjects] = useState<Project[]>(() => JSON.parse(localStorage.getItem('p_projects') || '[]'));
   const [memos, setMemos] = useState<Memo[]>(() => JSON.parse(localStorage.getItem('p_memos') || '[]'));
   const [transactions, setTransactions] = useState<Transaction[]>(() => JSON.parse(localStorage.getItem('p_trans') || '[]'));
   const [events, setEvents] = useState<CalendarEvent[]>(() => JSON.parse(localStorage.getItem('p_events') || '[]'));
 
-  // สุขภาพ
+  // Health Stats
   const [waterIntake, setWaterIntake] = useState(() => Number(localStorage.getItem('p_water') || 0));
   const [steps, setSteps] = useState(() => Number(localStorage.getItem('p_steps') || 0));
   const [sleepHours, setSleepHours] = useState(() => Number(localStorage.getItem('p_sleep') || 7));
@@ -66,7 +66,7 @@ const App = () => {
   const [notifPermission, setNotifPermission] = useState(typeof Notification !== 'undefined' ? Notification.permission : 'denied');
   const [activeAlerts, setActiveAlerts] = useState<CalendarEvent[]>([]);
 
-  // --- ระบบบันทึกอัตโนมัติ ---
+  // --- Auto-Save ---
   useEffect(() => {
     localStorage.setItem('p_todos', JSON.stringify(todos));
     localStorage.setItem('p_projects', JSON.stringify(projects));
@@ -81,7 +81,7 @@ const App = () => {
     localStorage.setItem('p_prompt_login', String(isLoggedIn));
   }, [todos, projects, memos, transactions, events, waterIntake, steps, sleepHours, weight, height, isLoggedIn]);
 
-  // --- ระบบแจ้งเตือน 15 นาที ---
+  // --- Notification Engine (15 mins Check) ---
   useEffect(() => {
     const timer = setInterval(() => {
       const now = new Date();
@@ -96,8 +96,8 @@ const App = () => {
 
           if (diff <= 15 && diff >= 0) {
             if ("Notification" in window && Notification.permission === "granted") {
-              new Notification(`นัดหมายสำคัญ: ${event.title}`, {
-                body: `จะเริ่มในอีก ${diff} นาที (${event.startTime} น.)`,
+              new Notification(`นัดหมายใกล้ถึงเวลา!`, {
+                body: `${event.title} (เริ่ม ${event.startTime} น.)`,
                 icon: "https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png"
               });
             }
@@ -143,9 +143,9 @@ const App = () => {
 
   const getBMIStatusInfo = (bmi: number) => {
     if (bmi < 18.5) return { text: 'ผอมไปนิด', color: 'text-blue-500', bg: 'bg-blue-100' };
-    if (bmi < 23) return { text: 'หุ่นดีมากครับ', color: 'text-green-500', bg: 'bg-green-100' };
-    if (bmi < 25) return { text: 'เริ่มท้วมแล้วนะ', color: 'text-yellow-600', bg: 'bg-yellow-100' };
-    return { text: 'น้ำหนักเกินครับ', color: 'text-red-600', bg: 'bg-red-100' };
+    if (bmi < 23) return { text: 'หุ่นดีมาก', color: 'text-green-500', bg: 'bg-green-100' };
+    if (bmi < 25) return { text: 'เริ่มท้วม', color: 'text-yellow-600', bg: 'bg-yellow-100' };
+    return { text: 'น้ำหนักเกิน', color: 'text-red-600', bg: 'bg-red-100' };
   };
 
   const handleSaveItem = () => {
@@ -177,12 +177,12 @@ const App = () => {
     if (!mood || !healthStory) return;
     setIsAnalyzing(true);
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-    const prompt = `คุณคือ "พี่พร้อม" ผู้ช่วยรุ่นพี่พัฒนากรจังหวัดสุราษฎร์ธานี ใจดี อบอุ่น น้องระบายเรื่อง "${healthStory}" (อารมณ์ ${mood}/5) ช่วยตอบให้กำลังใจสั้นๆ 2 ประโยค ตบท้ายด้วย emoji`;
+    const prompt = `คุณคือ "พี่พร้อม" ผู้ช่วยรุ่นพี่พัฒนากรจังหวัดสุราษฎร์ธานี ใจดี อบอุ่น น้องพัฒนากรบอกว่าเจอเรื่องนี้มา: "${healthStory}" (อารมณ์ ${mood}/5) ช่วยตอบให้กำลังใจสั้นๆ 2 ประโยค ตบท้ายด้วย emoji`;
     try {
       const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) });
       const res = await response.json();
       setAiResponse(res.candidates?.[0]?.content?.parts?.[0]?.text);
-    } catch { setAiResponse("พี่พร้อมอยู่ข้างๆ เสมอนะครับ พักผ่อนบ้างนะพี่ สู้ๆ! ❤️"); }
+    } catch { setAiResponse("พี่พร้อมอยู่ข้างๆ เสมอนะครับ สู้ๆ! ❤️"); }
     setIsAnalyzing(false);
     setHealthStory('');
     setMood(null);
@@ -194,7 +194,7 @@ const App = () => {
         <div className="absolute top-[-10%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
         <div className="mb-8 transform hover:scale-110 transition-transform duration-500"><AppLogo size={140} /></div>
         <h1 className="text-4xl font-black mb-2 tracking-tighter drop-shadow-lg uppercase">พี่พร้อม</h1>
-        <p className="mb-12 opacity-90 font-medium text-lg italic text-orange-100">"เพื่อนคู่คิด ไปไหนไปกัน"</p>
+        <p className="mb-12 opacity-90 font-medium text-lg italic text-orange-100 uppercase tracking-widest">"เพื่อนคู่คิด ไปไหนไปกัน"</p>
         <button onClick={() => setIsLoggedIn(true)} className="bg-black text-white px-12 py-5 rounded-[2.5rem] font-black w-full max-w-xs shadow-2xl active:scale-95 transition-all text-xl uppercase tracking-widest border-b-4 border-gray-800">เริ่มใช้งาน</button>
       </div>
     );
@@ -211,7 +211,7 @@ const App = () => {
               <div className="flex items-center gap-3">
                 <div className="bg-white/20 p-2 rounded-xl animate-pulse"><Bell size={20}/></div>
                 <div>
-                  <p className="text-[10px] font-black uppercase opacity-80 tracking-widest">นัดหมายใกล้ถึงเวลา!</p>
+                  <p className="text-[10px] font-black uppercase opacity-80 tracking-widest leading-none mb-1">ใกล้ถึงเวลานัด!</p>
                   <p className="text-sm font-bold tracking-tight">{alert.title}</p>
                 </div>
               </div>
@@ -221,7 +221,7 @@ const App = () => {
         </div>
       )}
 
-      {/* Header with 2 People Logo */}
+      {/* Header with Logo and Notification Status */}
       <div className="bg-white/95 backdrop-blur-md p-4 flex justify-between items-center sticky top-0 z-40 border-b border-gray-100 shadow-sm">
         <div className="flex items-center gap-3">
           <AppLogo size={50} className="rounded-2xl shadow-md" />
@@ -239,7 +239,7 @@ const App = () => {
       <div className="h-full overflow-y-auto custom-scrollbar pb-32">
         {activeTab === 'work' && (
           <div className="p-4 space-y-6 animate-fade-in">
-            {/* ปุ่ม Activate แจ้งเตือน (Indigo Card) */}
+            {/* ปุ่ม Activate แจ้งเตือน (indigo card) */}
             {notifPermission !== 'granted' && (
                <div className="p-5 bg-indigo-600 text-white rounded-[2.5rem] flex items-start gap-4 shadow-xl relative overflow-hidden">
                   <div className="absolute right-[-10px] top-[-10px] opacity-10"><Bell size={80} /></div>
@@ -283,7 +283,7 @@ const App = () => {
                     <div className="flex justify-between items-center mb-1">
                         <span className="text-[10px] text-gray-500 font-black uppercase tracking-widest">งบ: ฿{p.budget?.toLocaleString() || '0'}</span>
                     </div>
-                    <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden"><div className="bg-orange-500 h-full w-1/4 shadow-[0_0_8px_rgba(249,115,22,0.8)]"></div></div>
+                    <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden"><div className="bg-orange-500 h-full w-1/3 shadow-[0_0_8px_rgba(249,115,22,0.8)]"></div></div>
                   </div>
                 ))}
                 <button onClick={() => { setAddType('project'); setShowAddModal(true); }} className="min-w-[120px] border-2 border-dashed border-gray-200 rounded-[2rem] flex flex-col items-center justify-center text-gray-400 bg-white hover:border-orange-300 transition-all shadow-sm"><Plus size={32}/><span className="text-[10px] font-black mt-1 uppercase tracking-widest">เพิ่มโครงการ</span></button>
@@ -306,7 +306,7 @@ const App = () => {
                         }`}>{t.priority}</span>
                       </div>
                     </div>
-                    <button onClick={() => deleteItem('todo', t.id)} className="text-gray-200 hover:text-red-500 p-1 transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={16}/></button>
+                    <button onClick={() => deleteItem('todo', t.id)} className="text-gray-200 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16}/></button>
                   </div>
                 ))}
               </div>
@@ -314,7 +314,6 @@ const App = () => {
           </div>
         )}
 
-        {/* Tab อื่นๆ ยังคงเดิมตาม Master Version */}
         {activeTab === 'memo' && (
           <div className="p-4 grid grid-cols-2 gap-3 animate-fade-in">
             {memos.map(m => (
@@ -333,7 +332,7 @@ const App = () => {
           <div className="p-4 space-y-6 animate-fade-in">
             <div className="bg-gray-900 text-white p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full -mr-16 -mt-16 blur-2xl"></div>
-              <p className="text-[10px] text-gray-400 mb-2 uppercase tracking-widest font-black">Financial Summary</p>
+              <p className="text-[10px] text-gray-400 mb-2 uppercase font-black">Financial Summary</p>
               <h2 className="text-4xl font-black tracking-tighter">฿ {transactions.reduce((acc, curr) => curr.type === 'income' ? acc + curr.amount : acc - curr.amount, 0).toLocaleString()}</h2>
               <div className="flex gap-3 mt-8">
                 <div className="flex-1 bg-white/5 p-3 rounded-2xl border border-white/10 backdrop-blur-sm text-center">
@@ -348,12 +347,12 @@ const App = () => {
             </div>
             <div className="space-y-2">
               {transactions.map(t => (
-                <div key={t.id} className="bg-white p-4 rounded-2xl flex justify-between items-center shadow-sm border border-gray-100">
+                <div key={t.id} className="bg-white p-4 rounded-2xl flex justify-between items-center shadow-sm border border-gray-100 active:scale-[0.98] transition-all">
                   <div className="flex items-center gap-3">
                     <div className={`p-2.5 rounded-xl ${t.type === 'income' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}>
                       {t.type === 'income' ? <TrendingUp size={18}/> : <TrendingDown size={18}/>}
                     </div>
-                    <div><p className="font-bold text-sm text-gray-800">{t.title}</p><p className="text-[10px] text-gray-400 uppercase">{t.date}</p></div>
+                    <div><p className="font-bold text-sm text-gray-800 tracking-tight">{t.title}</p><p className="text-[10px] text-gray-400 font-bold uppercase">{t.date}</p></div>
                   </div>
                   <p className={`font-black text-sm ${t.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>{t.type === 'income' ? '+' : '-'}{t.amount.toLocaleString()}</p>
                 </div>
@@ -365,7 +364,7 @@ const App = () => {
         {activeTab === 'health' && (
           <div className="p-4 space-y-6 animate-fade-in pb-32">
             <section className="bg-white p-8 rounded-[3rem] shadow-sm border border-gray-100 text-center relative overflow-hidden">
-              <Smile size={48} className="mx-auto text-orange-500 mb-6" />
+              <Smile size={48} className="mx-auto text-orange-500 mb-6 shadow-inner" />
               <h3 className="font-black text-gray-800 tracking-tight uppercase tracking-widest">วันนี้รู้สึกอย่างไรบ้าง?</h3>
               <div className="flex justify-center gap-3 mt-6">
                 {[1,2,3,4,5].map(lv => (
@@ -407,41 +406,33 @@ const App = () => {
                    <button onClick={() => setSleepHours(s => Math.min(12, s + 0.5))} className="flex-1 bg-white/40 hover:bg-white/50 text-white py-2 rounded-xl text-xs font-black">+</button>
                 </div>
               </div>
-              <div className="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm col-span-2">
-                <div className="flex justify-between items-center mb-2">
-                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">ก้าวเดินวันนี้</p>
-                   <Footprints size={16} className="text-orange-500" />
-                </div>
-                <div className="flex items-end gap-1"><span className="text-3xl font-black text-gray-800 tracking-tighter">{steps.toLocaleString()}</span><span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">/ 10k steps</span></div>
-                <input type="range" min="0" max="15000" step="500" value={steps} onChange={(e) => setSteps(Number(e.target.value))} className="w-full mt-4 accent-orange-500 h-1.5 bg-gray-100 rounded-full appearance-none cursor-pointer"/>
+              <div className="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm col-span-2 text-center">
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">ก้าวเดินวันนี้</p>
+                <span className="text-3xl font-black text-gray-800 tracking-tighter">{steps.toLocaleString()}</span>
+                <input type="range" min="0" max="15000" step="500" value={steps} onChange={(e) => setSteps(Number(e.target.value))} className="w-full mt-4 accent-orange-500 h-1.5 bg-gray-100 rounded-full appearance-none"/>
               </div>
-              <div className="bg-emerald-900 text-white p-7 rounded-[2.5rem] shadow-xl col-span-2 relative overflow-hidden group">
+              <div className="bg-emerald-900 text-white p-7 rounded-[2.5rem] shadow-xl col-span-2 relative overflow-hidden group text-center">
                  <Scale className="absolute right-[-20px] top-[-20px] opacity-10" size={120}/>
-                 <h4 className="text-[10px] font-black uppercase tracking-widest mb-6 opacity-80 flex items-center gap-2 font-bold"><Scale size={14}/> Body & BMI Status</h4>
-                 <div className="flex gap-6 relative z-10">
-                    <div className="flex-1 space-y-4">
-                        <div>
-                            <p className="text-[9px] text-emerald-300 font-black mb-1 uppercase leading-none">น้ำหนัก (กก.)</p>
-                            <div className="flex items-center gap-3">
-                                <button onClick={() => setWeight(w => w - 1)} className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center font-black active:bg-white/20">-</button>
-                                <span className="font-black text-2xl w-8 text-center tracking-tighter">{weight}</span>
-                                <button onClick={() => setWeight(w => w + 1)} className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center font-black active:bg-white/20">+</button>
-                            </div>
-                        </div>
-                        <div>
-                            <p className="text-[9px] text-emerald-300 font-black mb-1 uppercase leading-none">ส่วนสูง (ซม.)</p>
-                            <div className="flex items-center gap-3">
-                                <button onClick={() => setHeight(h => h - 1)} className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center font-black active:bg-white/20">-</button>
-                                <span className="font-black text-2xl w-8 text-center tracking-tighter">{height}</span>
-                                <button onClick={() => setHeight(h => h + 1)} className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center font-black active:bg-white/20">+</button>
-                            </div>
+                 <p className="text-[10px] text-emerald-300 font-black mb-1 uppercase tracking-widest">BMI INDEX</p>
+                 <p className={`text-5xl font-black tracking-tighter`}>{calculateBMIValue()}</p>
+                 <div className={`mt-2 inline-block px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${getBMIStatusInfo(parseFloat(calculateBMIValue())).bg} ${getBMIStatusInfo(parseFloat(calculateBMIValue())).color}`}>
+                    {getBMIStatusInfo(parseFloat(calculateBMIValue())).text}
+                 </div>
+                 <div className="flex gap-4 mt-8 relative z-10 justify-center">
+                    <div className="flex flex-col items-center">
+                        <p className="text-[9px] text-emerald-300 font-black uppercase mb-1">น้ำหนัก (กก.)</p>
+                        <div className="flex items-center gap-2">
+                           <button onClick={() => setWeight(w => w - 1)} className="w-8 h-8 bg-white/10 rounded-lg font-black">-</button>
+                           <span className="font-black text-lg w-8">{weight}</span>
+                           <button onClick={() => setWeight(w => w + 1)} className="w-8 h-8 bg-white/10 rounded-lg font-black">+</button>
                         </div>
                     </div>
-                    <div className="flex-1 bg-white rounded-[2.5rem] p-5 text-center flex flex-col items-center justify-center shadow-inner border border-white/20">
-                        <p className="text-[10px] text-gray-400 font-black mb-1 uppercase tracking-widest leading-none">BMI</p>
-                        <p className={`text-5xl font-black tracking-tighter ${getBMIStatusInfo(parseFloat(calculateBMIValue())).color}`}>{calculateBMIValue()}</p>
-                        <div className={`mt-2 px-3 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${getBMIStatusInfo(parseFloat(calculateBMIValue())).bg} ${getBMIStatusInfo(parseFloat(calculateBMIValue())).color}`}>
-                            {getBMIStatusInfo(parseFloat(calculateBMIValue())).text}
+                    <div className="flex flex-col items-center">
+                        <p className="text-[9px] text-emerald-300 font-black uppercase mb-1">ส่วนสูง (ซม.)</p>
+                        <div className="flex items-center gap-2">
+                           <button onClick={() => setHeight(h => h - 1)} className="w-8 h-8 bg-white/10 rounded-lg font-black">-</button>
+                           <span className="font-black text-lg w-8">{height}</span>
+                           <button onClick={() => setHeight(h => h + 1)} className="w-8 h-8 bg-white/10 rounded-lg font-black">+</button>
                         </div>
                     </div>
                  </div>
@@ -453,19 +444,19 @@ const App = () => {
 
       {/* Bottom Nav */}
       <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t flex justify-between items-center h-[85px] rounded-t-[2.5rem] px-6 shadow-[0_-5px_20px_rgba(0,0,0,0.05)] max-w-md mx-auto z-50">
-        <button onClick={() => setActiveTab('work')} className={`flex flex-col items-center flex-1 transition-all ${activeTab === 'work' ? 'text-orange-600 scale-110 font-bold' : 'text-gray-300'}`}><Briefcase size={24}/><span className="text-[9px] mt-1 font-black uppercase tracking-tight font-bold">งาน</span></button>
-        <button onClick={() => setActiveTab('memo')} className={`flex flex-col items-center flex-1 transition-all ${activeTab === 'memo' ? 'text-orange-600 scale-110 font-bold' : 'text-gray-300'}`}><StickyNote size={24}/><span className="text-[9px] mt-1 font-black uppercase tracking-tight font-bold">โน้ต</span></button>
-        <button onClick={() => { setAddType('event'); setShowAddModal(true); }} className="bg-black text-white p-4 rounded-2xl shadow-2xl relative -top-6 hover:scale-110 active:scale-90 transition-all border-4 border-gray-50 shadow-orange-500/20"><Plus size={32}/></button>
-        <button onClick={() => setActiveTab('finance')} className={`flex flex-col items-center flex-1 transition-all ${activeTab === 'finance' ? 'text-orange-600 scale-110 font-bold' : 'text-gray-300'}`}><Wallet size={24}/><span className="text-[9px] mt-1 font-black uppercase tracking-tight font-bold">บัญชี</span></button>
-        <button onClick={() => setActiveTab('health')} className={`flex flex-col items-center flex-1 transition-all ${activeTab === 'health' ? 'text-orange-600 scale-110 font-bold' : 'text-gray-300'}`}><Activity size={24}/><span className="text-[9px] mt-1 font-black uppercase tracking-tight font-bold">สุขภาพ</span></button>
+        <button onClick={() => setActiveTab('work')} className={`flex flex-col items-center flex-1 transition-all ${activeTab === 'work' ? 'text-orange-600 scale-110 font-bold' : 'text-gray-300'}`}><Briefcase size={24}/><span className="text-[9px] mt-1 font-black uppercase tracking-tight">งาน</span></button>
+        <button onClick={() => setActiveTab('memo')} className={`flex flex-col items-center flex-1 transition-all ${activeTab === 'memo' ? 'text-orange-600 scale-110 font-bold' : 'text-gray-300'}`}><StickyNote size={24}/><span className="text-[9px] mt-1 font-black uppercase tracking-tight">โน้ต</span></button>
+        <button onClick={() => { setAddType('event'); setShowAddModal(true); }} className="bg-black text-white p-4 rounded-2xl shadow-2xl relative -top-6 hover:scale-110 active:scale-90 transition-all border-4 border-gray-50"><Plus size={32}/></button>
+        <button onClick={() => setActiveTab('finance')} className={`flex flex-col items-center flex-1 transition-all ${activeTab === 'finance' ? 'text-orange-600 scale-110 font-bold' : 'text-gray-300'}`}><Wallet size={24}/><span className="text-[9px] mt-1 font-black uppercase tracking-tight">บัญชี</span></button>
+        <button onClick={() => setActiveTab('health')} className={`flex flex-col items-center flex-1 transition-all ${activeTab === 'health' ? 'text-orange-600 scale-110 font-bold' : 'text-gray-300'}`}><Activity size={24}/><span className="text-[9px] mt-1 font-black uppercase tracking-tight">สุขภาพ</span></button>
       </div>
 
       {/* Add Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/70 z-[100] flex items-end animate-fade-in p-4" onClick={() => setShowAddModal(false)}>
-          <div className="bg-white w-full max-w-md mx-auto p-8 rounded-[3.5rem] animate-slide-up shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar" onClick={e => e.stopPropagation()}>
+          <div className="bg-white w-full max-w-md mx-auto p-8 rounded-[3.5rem] animate-slide-up shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-8 px-2">
-              <h3 className="font-black text-xl uppercase tracking-widest tracking-tighter">เพิ่มรายการใหม่</h3>
+              <h3 className="font-black text-xl uppercase tracking-tighter">เพิ่มรายการใหม่</h3>
               <button onClick={() => setShowAddModal(false)} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"><X size={20}/></button>
             </div>
             
@@ -479,7 +470,7 @@ const App = () => {
               </div>
 
               <div className="space-y-4">
-                <input type="text" placeholder="หัวข้อเรื่อง / รายการ" value={formData.title || ''} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full p-5 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-orange-200 font-bold text-lg shadow-inner outline-none"/>
+                <input type="text" placeholder="หัวข้อเรื่อง / รายการ" value={formData.title || ''} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full p-5 bg-gray-50 rounded-3xl border-none focus:ring-2 focus:ring-orange-200 font-bold text-lg shadow-inner outline-none"/>
                 
                 {addType === 'transaction' && (
                   <div className="flex gap-2">
@@ -489,7 +480,7 @@ const App = () => {
                 )}
 
                 {(addType === 'project' || addType === 'transaction') && (
-                  <input type="number" placeholder="จำนวนเงิน / งบประมาณ (฿)" value={formData.amount || ''} onChange={e => setFormData({...formData, amount: e.target.value})} className="w-full p-5 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-orange-200 font-black text-xl shadow-inner outline-none"/>
+                  <input type="number" placeholder="จำนวนเงิน / งบประมาณ (฿)" value={formData.amount || ''} onChange={e => setFormData({...formData, amount: e.target.value})} className="w-full p-5 bg-gray-50 rounded-3xl border-none focus:ring-2 focus:ring-orange-200 font-black text-xl shadow-inner outline-none"/>
                 )}
 
                 {(addType === 'event' || addType === 'task') && (
