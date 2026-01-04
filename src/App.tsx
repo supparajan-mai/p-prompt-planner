@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Calendar, CheckSquare, Activity, Smile, Plus, Droplets, Moon, Coffee, Briefcase, Mail, Bell, LogOut, MapPin, Users, FileText, Wallet, TrendingUp, TrendingDown, Heart, X, Clock, Save, Map, Navigation, StickyNote, PenTool, Search, MoreVertical, Target, ChevronRight, Trash2, PieChart, Info, DollarSign, Sparkles, MessageCircle, Send, Footprints, Scale, BarChart2, Phone, User, MessageSquare, Laugh, AlertCircle, BellRing, Zap
+  Calendar, CheckSquare, Activity, Smile, Plus, Droplets, Moon, Coffee, Briefcase, Mail, Bell, LogOut, MapPin, Users, FileText, Wallet, TrendingUp, TrendingDown, Heart, X, Clock, Save, Map, Navigation, StickyNote, PenTool, Search, MoreVertical, Target, ChevronRight, Trash2, PieChart, Info, DollarSign, Sparkles, MessageCircle, Send, Footprints, Scale, BarChart2, Phone, User, MessageSquare, Laugh, AlertCircle, BellRing, Zap, CheckCircle2, Circle, ChevronDown, ListTodo
 } from 'lucide-react';
 
 // --- Configuration ---
@@ -17,7 +17,8 @@ const AppLogo = ({ size = 80, className = "" }: { size?: number, className?: str
 
 // --- Types ---
 interface Todo { id: number; text: string; priority: 'ด่วนมาก' | 'ด่วน' | 'ปกติ'; completed: boolean; deadline?: string; notified?: boolean; }
-interface Project { id: number; name: string; targetArea?: string; quarter?: string; budget?: number; note?: string; }
+interface ProjectTask { id: number; text: string; completed: boolean; }
+interface Project { id: number; name: string; targetArea?: string; quarter?: string; budget?: number; note?: string; tasks: ProjectTask[]; }
 interface CalendarEvent { id: number; title: string; startTime: string; endTime?: string; date: string; location?: string; notified?: boolean; }
 interface Transaction { id: number; title: string; amount: number; type: 'income' | 'expense'; date: string; }
 interface Memo { id: number; title: string; content: string; color: string; date: string; }
@@ -42,7 +43,7 @@ const App = () => {
   const [weight, setWeight] = useState(() => Number(localStorage.getItem('p_weight') || 65));
   const [height, setHeight] = useState(() => Number(localStorage.getItem('p_height') || 170));
   
-  // UI
+  // UI States
   const [mood, setMood] = useState<number | null>(null);
   const [healthStory, setHealthStory] = useState('');
   const [aiResponse, setAiResponse] = useState<string | null>(null);
@@ -56,6 +57,10 @@ const App = () => {
   const [formData, setFormData] = useState<any>({ color: 'bg-yellow-100', priority: 'ปกติ', quarter: '1' });
   const [transactionType, setTransactionType] = useState<'income' | 'expense'>('expense');
 
+  // State สำหรับจัดการงานย่อย (Task Manager Modal)
+  const [selectedProjectForTasks, setSelectedProjectForTasks] = useState<Project | null>(null);
+  const [newTaskInput, setNewTaskInput] = useState("");
+
   // --- Auto-Save ---
   useEffect(() => {
     const data = { p_todos: todos, p_projects: projects, p_memos: memos, p_trans: transactions, p_events: events, p_water: waterIntake, p_steps: steps, p_sleep: sleepHours, p_weight: weight, p_height: height, p_prompt_login: isLoggedIn };
@@ -66,7 +71,14 @@ const App = () => {
   const sendNotification = (title: string, body: string) => {
     if ('serviceWorker' in navigator && Notification.permission === 'granted') {
       navigator.serviceWorker.ready.then(reg => {
-        reg.active?.postMessage({ type: 'NOTIFICATION', title, body });
+        reg.showNotification(title, {
+          body,
+          icon: 'https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png',
+          badge: 'https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png',
+          tag: 'p-prompt-alert',
+          renotify: true,
+          vibrate: [200, 100, 200]
+        });
       });
     } else if (Notification.permission === 'granted') {
       new Notification(title, { body });
@@ -77,16 +89,11 @@ const App = () => {
     if ("Notification" in window) {
       const permission = await Notification.requestPermission();
       setNotifPermission(permission);
-      if (permission === 'granted') {
-          sendNotification("พี่พร้อม สแตนด์บาย!", "ระบบแจ้งเตือนเริ่มทำงานแล้วครับพี่");
-      }
-    } else {
-      // Fallback for browsers that don't support Notification in iframe
-      setNotifPermission('granted'); // Fake it for preview purposes if needed
+      if (permission === 'granted') sendNotification("พี่พร้อม สแตนด์บาย!", "ระบบแจ้งเตือนเริ่มทำงานแล้วครับพี่");
     }
   };
 
-  // --- Heartbeat check (Every 30s) ---
+  // --- 15 Mins Heartbeat ---
   useEffect(() => {
     const timer = setInterval(() => {
       const now = new Date();
@@ -136,20 +143,81 @@ const App = () => {
 
   const handleSaveItem = () => {
     const id = Date.now();
-    if (addType === 'task' && formData.title) setTodos([...todos, { id, text: formData.title, priority: formData.priority, completed: false, deadline: formData.date }]);
-    else if (addType === 'project' && formData.title) setProjects([...projects, { id, name: formData.title, targetArea: formData.location, quarter: formData.quarter, budget: Number(formData.amount), note: formData.note }]);
-    else if (addType === 'transaction' && formData.amount) setTransactions([...transactions, { id, title: formData.title || (transactionType === 'income' ? 'รายรับ' : 'รายจ่าย'), amount: Number(formData.amount), type: transactionType, date: new Date().toLocaleDateString('th-TH') }]);
-    else if (addType === 'memo' && formData.title) setMemos([...memos, { id, title: formData.title, content: formData.content || '', color: formData.color, date: new Date().toLocaleDateString('th-TH') }]);
-    else if (addType === 'event' && formData.title) setEvents([...events, { id, title: formData.title, startTime: formData.startTime || '09:00', endTime: formData.endTime, date: formData.date || new Date().toISOString().split('T')[0], location: formData.location, notified: false }]);
-    setFormData({ color: 'bg-yellow-100', priority: 'ปกติ', quarter: '1' }); setShowAddModal(false);
+    if (addType === 'task' && formData.title) {
+      setTodos([...todos, { id, text: formData.title, priority: formData.priority, completed: false, deadline: formData.date }]);
+    } else if (addType === 'project' && formData.title) {
+      setProjects([...projects, { id, name: formData.title, targetArea: formData.location, quarter: formData.quarter, budget: Number(formData.amount), note: formData.note, tasks: [] }]);
+    } else if (addType === 'transaction' && formData.amount) {
+      setTransactions([...transactions, { id, title: formData.title || (transactionType === 'income' ? 'รายรับ' : 'รายจ่าย'), amount: Number(formData.amount), type: transactionType, date: new Date().toLocaleDateString('th-TH') }]);
+    } else if (addType === 'memo' && formData.title) {
+      setMemos([...memos, { id, title: formData.title, content: formData.content || '', color: formData.color, date: new Date().toLocaleDateString('th-TH') }]);
+    } else if (addType === 'event' && formData.title) {
+      setEvents([...events, { id, title: formData.title, startTime: formData.startTime || '09:00', endTime: formData.endTime, date: formData.date || new Date().toISOString().split('T')[0], location: formData.location, notified: false }]);
+    }
+    setFormData({ color: 'bg-yellow-100', priority: 'ปกติ', quarter: '1' });
+    setShowAddModal(false);
   };
 
   const deleteItem = (type: string, id: number) => {
     if (type === 'todo') setTodos(todos.filter(t => t.id !== id));
-    if (type === 'project') setProjects(projects.filter(p => p.id !== id));
+    if (type === 'project') {
+        setProjects(projects.filter(p => p.id !== id));
+        if (selectedProjectForTasks?.id === id) setSelectedProjectForTasks(null);
+    }
     if (type === 'trans') setTransactions(transactions.filter(t => t.id !== id));
     if (type === 'memo') setMemos(memos.filter(m => m.id !== id));
     if (type === 'event') setEvents(events.filter(e => e.id !== id));
+  };
+
+  // --- ระบบจัดการ Task ในโครงการ (Inside View) ---
+  const addSubTask = () => {
+    if (!selectedProjectForTasks || !newTaskInput) return;
+    const newTask = { id: Date.now(), text: newTaskInput, completed: false };
+    
+    const updatedProjects = projects.map(p => {
+      if (p.id === selectedProjectForTasks.id) {
+        const updatedTasks = [...p.tasks, newTask];
+        const updatedP = { ...p, tasks: updatedTasks };
+        setSelectedProjectForTasks(updatedP); // อัปเดตตัวที่กำลังเปิดอยู่ด้วย
+        return updatedP;
+      }
+      return p;
+    });
+    
+    setProjects(updatedProjects);
+    setNewTaskInput("");
+  };
+
+  const toggleSubTask = (taskId: number) => {
+    if (!selectedProjectForTasks) return;
+    
+    const updatedProjects = projects.map(p => {
+      if (p.id === selectedProjectForTasks.id) {
+        const updatedTasks = p.tasks.map(t => t.id === taskId ? { ...t, completed: !t.completed } : t);
+        const updatedP = { ...p, tasks: updatedTasks };
+        setSelectedProjectForTasks(updatedP);
+        return updatedP;
+      }
+      return p;
+    });
+    
+    setProjects(updatedProjects);
+  };
+
+  const deleteSubTask = (taskId: number) => {
+    if (!selectedProjectForTasks) return;
+    
+    const updatedProjects = projects.map(p => {
+      if (p.id === selectedProjectForTasks.id) {
+        const updatedTasks = p.tasks.filter(t => t.id !== taskId);
+        const updatedP = { ...p, tasks: updatedTasks };
+        setSelectedProjectForTasks(updatedP);
+        return updatedP;
+      }
+      return p;
+    });
+    
+    setProjects(updatedProjects);
   };
 
   if (!isLoggedIn) {
@@ -159,7 +227,7 @@ const App = () => {
         <div className="mb-8 transform hover:scale-110 transition-transform duration-500"><AppLogo size={140} /></div>
         <h1 className="text-4xl font-black mb-2 tracking-tighter uppercase">พี่พร้อม</h1>
         <p className="mb-12 opacity-90 font-medium text-lg text-orange-100 italic">"เพื่อนคู่คิด ไปไหนไปกัน"</p>
-        <button onClick={() => setIsLoggedIn(true)} className="bg-black text-white px-12 py-5 rounded-[2.5rem] font-black w-full shadow-2xl active:scale-95 transition-all text-xl uppercase tracking-widest border-b-4 border-gray-800">เริ่มใช้งาน</button>
+        <button onClick={() => setIsLoggedIn(true)} className="bg-black text-white px-12 py-5 rounded-[2.5rem] font-black w-full max-w-xs shadow-2xl active:scale-95 transition-all text-xl uppercase tracking-widest border-b-4 border-gray-800">เริ่มใช้งาน</button>
       </div>
     );
   }
@@ -201,7 +269,7 @@ const App = () => {
         {activeTab === 'work' && (
           <div className="p-4 space-y-6 animate-fade-in">
             
-            {/* --- แถบสีน้ำเงิน (แก้ไขเงื่อนไขให้โชว์ถ้าไม่ใช่ granted เพื่อให้เห็นใน Preview) --- */}
+            {/* แถบสีน้ำเงิน */}
             {notifPermission !== 'granted' && (
                <div className="p-6 bg-indigo-600 text-white rounded-[2.5rem] flex items-start gap-4 shadow-xl relative overflow-hidden animate-slide-up">
                   <div className="absolute right-[-10px] top-[-10px] opacity-10"><BellRing size={80} /></div>
@@ -214,6 +282,7 @@ const App = () => {
                </div>
             )}
 
+            {/* นัดหมาย */}
             <section>
               <h3 className="font-black text-gray-800 mb-3 flex items-center gap-2 uppercase tracking-tight text-sm"><Calendar size={18} className="text-orange-500"/> นัดหมายวันนี้</h3>
               <div className="space-y-2">
@@ -228,24 +297,56 @@ const App = () => {
               </div>
             </section>
 
+            {/* โครงการ (กดเพื่อเข้าไปเพิ่ม Task) */}
             <section>
               <h3 className="font-black text-gray-800 mb-3 flex items-center gap-2 uppercase tracking-tight text-sm"><Briefcase size={18} className="text-orange-500"/> โครงการ</h3>
-              <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide">
-                {projects.map(p => (
-                  <div key={p.id} className="min-w-[240px] bg-gray-900 text-white p-5 rounded-[2rem] relative shadow-xl">
-                    <button onClick={() => deleteItem('project', p.id)} className="absolute top-3 right-3 text-white/20 hover:text-red-400"><X size={14}/></button>
-                    <span className="text-[9px] bg-orange-600 px-2 py-0.5 rounded-full font-black uppercase tracking-widest mb-2 inline-block">ไตรมาส {p.quarter || '-'}</span>
-                    <h4 className="font-bold text-sm truncate mb-1 tracking-tight">{p.name}</h4>
-                    <p className="text-[10px] text-gray-400 mb-4 flex items-center gap-1 font-bold"><MapPin size={10}/> {p.targetArea || 'ลงพื้นที่'}</p>
-                    <div className="w-full bg-white/10 h-1 rounded-full overflow-hidden"><div className="bg-orange-500 h-full w-1/3 shadow-[0_0_8px_rgba(249,115,22,0.8)]"></div></div>
-                  </div>
-                ))}
-                <button onClick={() => { setAddType('project'); setShowAddModal(true); }} className="min-w-[120px] border-2 border-dashed border-gray-200 rounded-[2rem] flex flex-col items-center justify-center text-gray-400 bg-white hover:border-orange-300 transition-all shadow-sm"><Plus size={32}/><span className="text-[10px] font-black mt-1 uppercase">เพิ่มโครงการ</span></button>
+              <div className="grid grid-cols-1 gap-3">
+                {projects.map(p => {
+                    const completed = p.tasks?.filter(t => t.completed).length || 0;
+                    const total = p.tasks?.length || 0;
+                    const progress = total > 0 ? (completed / total) * 100 : 0;
+
+                    return (
+                      <button 
+                        key={p.id} 
+                        onClick={() => setSelectedProjectForTasks(p)}
+                        className="bg-gray-900 text-white p-5 rounded-[2rem] text-left relative shadow-xl overflow-hidden group active:scale-95 transition-all"
+                      >
+                        <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full -mr-16 -mt-16 blur-2xl group-hover:bg-orange-500/20 transition-all"></div>
+                        <div className="flex justify-between items-start mb-4 relative z-10">
+                            <div>
+                                <span className="text-[9px] bg-orange-600 px-2 py-0.5 rounded-full font-black uppercase tracking-widest mb-1 inline-block">ไตรมาส {p.quarter || '-'}</span>
+                                <h4 className="font-bold text-lg leading-none tracking-tight">{p.name}</h4>
+                                <p className="text-[10px] text-gray-400 flex items-center gap-1 font-bold mt-2 uppercase tracking-widest"><MapPin size={10}/> {p.targetArea || 'ลงพื้นที่'}</p>
+                            </div>
+                            <div className="bg-white/5 p-2 rounded-xl"><ListTodo size={20} className="text-orange-500" /></div>
+                        </div>
+
+                        <div className="relative z-10">
+                            <div className="flex justify-between items-end mb-1.5 px-0.5">
+                                <p className="text-[9px] text-gray-500 font-black uppercase">Progress: {completed}/{total}</p>
+                                <p className="text-[12px] font-black text-orange-500">{Math.round(progress)}%</p>
+                            </div>
+                            <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
+                                <div className="bg-orange-500 h-full transition-all duration-700 shadow-[0_0_8px_rgba(249,115,22,0.6)]" style={{ width: `${progress}%` }}></div>
+                            </div>
+                        </div>
+                        <p className="text-[9px] text-gray-500 mt-4 text-center font-black uppercase tracking-widest opacity-40">คลิกเพื่อจัดการงานย่อย</p>
+                      </button>
+                    );
+                })}
+                <button 
+                    onClick={() => { setAddType('project'); setShowAddModal(true); }} 
+                    className="border-2 border-dashed border-gray-200 rounded-[2.5rem] py-10 flex flex-col items-center justify-center text-gray-400 bg-white hover:border-orange-300 transition-all shadow-sm"
+                >
+                    <Plus size={32}/><span className="text-[10px] font-black mt-1 uppercase tracking-widest">สร้างโครงการใหม่</span>
+                </button>
               </div>
             </section>
 
+            {/* งานต้องทำทั่วไป */}
             <section>
-              <h3 className="font-black text-gray-800 mb-3 flex items-center gap-2 uppercase tracking-tight text-sm"><CheckSquare size={18} className="text-orange-500"/> งานต้องทำ</h3>
+              <h3 className="font-black text-gray-800 mb-3 flex items-center gap-2 uppercase tracking-tight text-sm"><CheckSquare size={18} className="text-orange-500"/> งานทั่วไป</h3>
               <div className="space-y-2">
                 {todos.map(t => (
                   <div key={t.id} className="bg-white p-4 rounded-2xl border border-gray-100 flex items-center gap-4 shadow-sm group">
@@ -259,6 +360,7 @@ const App = () => {
           </div>
         )}
 
+        {/* Tab อื่นๆ ยังคงเดิมตามเวอร์ชัน Master */}
         {activeTab === 'memo' && (
           <div className="p-4 grid grid-cols-2 gap-3 animate-fade-in">
             {memos.map(m => (
@@ -269,24 +371,24 @@ const App = () => {
                 <p className="text-[8px] font-black text-black/20 mt-2 uppercase tracking-tighter text-right">{m.date}</p>
               </div>
             ))}
-            <button onClick={() => { setAddType('memo'); setShowAddModal(true); }} className="border-2 border-dashed border-gray-200 rounded-[2.5rem] p-4 flex flex-col items-center justify-center text-gray-400 bg-white h-[180px] hover:border-orange-200 transition-all shadow-sm"><Plus size={32}/><span className="text-[10px] font-black mt-1 uppercase">โน้ตใหม่</span></button>
+            <button onClick={() => { setAddType('memo'); setShowAddModal(true); }} className="border-2 border-dashed border-gray-200 rounded-[2.5rem] p-4 flex flex-col items-center justify-center text-gray-400 bg-white h-[180px] hover:border-orange-200 transition-all shadow-sm"><Plus size={32}/><span className="text-[10px] font-black mt-1 uppercase tracking-widest">โน้ตใหม่</span></button>
           </div>
         )}
 
         {activeTab === 'finance' && (
           <div className="p-4 space-y-6 animate-fade-in">
             <div className="bg-gray-900 text-white p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full -mr-16 -mt-16 blur-2xl"></div>
-              <p className="text-[10px] text-gray-400 mb-2 uppercase font-black">Financial Summary</p>
+              <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full -mr-16 -mt-16 blur-2xl text-orange-500"></div>
+              <p className="text-[10px] text-gray-400 mb-2 uppercase font-black tracking-widest">Account Balance</p>
               <h2 className="text-4xl font-black tracking-tighter">฿ {transactions.reduce((acc, curr) => curr.type === 'income' ? acc + curr.amount : acc - curr.amount, 0).toLocaleString()}</h2>
-              <div className="flex gap-3 mt-8">
+              <div className="flex gap-3 mt-8 relative z-10">
                 <div className="flex-1 bg-white/5 p-3 rounded-2xl border border-white/10 backdrop-blur-sm text-center"><p className="text-[10px] font-black text-green-400 uppercase mb-1">รายรับรวม</p><p className="text-sm font-black tracking-tight">฿ {transactions.filter(t => t.type === 'income').reduce((a, c) => a + c.amount, 0).toLocaleString()}</p></div>
                 <div className="flex-1 bg-white/5 p-3 rounded-2xl border border-white/10 backdrop-blur-sm text-center"><p className="text-[10px] font-black text-red-400 uppercase mb-1">รายจ่ายรวม</p><p className="text-sm font-black tracking-tight">฿ {transactions.filter(t => t.type === 'expense').reduce((a, c) => a + c.amount, 0).toLocaleString()}</p></div>
               </div>
             </div>
             <div className="space-y-2">
               {transactions.map(t => (
-                <div key={t.id} className="bg-white p-4 rounded-2xl flex justify-between items-center shadow-sm border border-gray-100 active:scale-[0.98] transition-all">
+                <div key={t.id} className="bg-white p-4 rounded-2xl flex justify-between items-center shadow-sm border border-gray-100">
                   <div className="flex items-center gap-3">
                     <div className={`p-2.5 rounded-xl ${t.type === 'income' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}><TrendingUp size={18}/></div>
                     <div><p className="font-bold text-sm text-gray-800 tracking-tight">{t.title}</p><p className="text-[10px] text-gray-400 font-bold uppercase">{t.date}</p></div>
@@ -302,7 +404,7 @@ const App = () => {
           <div className="p-4 space-y-6 animate-fade-in pb-32">
             <section className="bg-white p-8 rounded-[3rem] shadow-sm border border-gray-100 text-center relative overflow-hidden">
               <Smile size={48} className="mx-auto text-orange-500 mb-6 shadow-inner" />
-              <h3 className="font-black text-gray-800 tracking-tight uppercase tracking-widest">วันนี้รู้สึกอย่างไรบ้าง?</h3>
+              <h3 className="font-black text-gray-800 tracking-tight uppercase">วันนี้รู้สึกอย่างไรบ้าง?</h3>
               <div className="flex justify-center gap-3 mt-6">
                 {[1,2,3,4,5].map(lv => (
                   <button key={lv} onClick={() => setMood(lv)} className={`text-4xl p-3 rounded-2xl transition-all ${mood === lv ? 'bg-orange-50 scale-125 shadow-md border-2 border-orange-200' : 'grayscale opacity-30'}`}>
@@ -311,16 +413,7 @@ const App = () => {
                 ))}
               </div>
               <textarea value={healthStory} onChange={e => setHealthStory(e.target.value)} placeholder="ระบายความในใจให้พี่พร้อมฟังได้นะ..." className="w-full mt-6 p-5 bg-gray-50 rounded-[2rem] border-none focus:ring-2 focus:ring-orange-200 text-sm h-32 resize-none shadow-inner font-medium"></textarea>
-              <button onClick={async () => {
-                 if (!mood || !healthStory) return; setIsAnalyzing(true);
-                 const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-                 const prompt = `คุณคือ "พี่พร้อม" ผู้ช่วยใจดี ให้กำลังใจสั้นๆ 2 ประโยค เรื่อง: "${healthStory}" (อารมณ์ ${mood}/5)`;
-                 try {
-                   const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) });
-                   const res = await response.json(); setAiResponse(res.candidates?.[0]?.content?.parts?.[0]?.text);
-                 } catch { setAiResponse("พี่พร้อมส่งกำลังใจให้พี่เสมอครับ สู้ๆ! ❤️"); }
-                 setIsAnalyzing(false); setHealthStory(''); setMood(null);
-              }} disabled={isAnalyzing} className="w-full mt-4 bg-black text-white py-5 rounded-[2rem] font-black shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all uppercase">
+              <button onClick={handleHealthSubmit} disabled={isAnalyzing} className="w-full mt-4 bg-black text-white py-5 rounded-[2rem] font-black shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all uppercase tracking-widest leading-none">
                 {isAnalyzing ? <><Sparkles className="animate-spin" size={20}/> พี่พร้อมกำลังฟัง...</> : <><Send size={20}/> ส่งให้พี่พร้อม</>}
               </button>
             </section>
@@ -341,6 +434,76 @@ const App = () => {
         )}
       </div>
 
+      {/* --- Task Manager Modal (Inside View) --- */}
+      {selectedProjectForTasks && (
+        <div className="fixed inset-0 bg-black/80 z-[200] flex items-end animate-fade-in" onClick={() => setSelectedProjectForTasks(null)}>
+            <div className="bg-white w-full max-w-md mx-auto p-8 rounded-t-[3.5rem] animate-slide-up shadow-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                <div className="flex justify-between items-start mb-6">
+                    <div>
+                        <h3 className="font-black text-2xl uppercase tracking-tighter text-gray-900 leading-none">{selectedProjectForTasks.name}</h3>
+                        <p className="text-[10px] font-black text-orange-600 uppercase tracking-widest mt-2 flex items-center gap-1"><Target size={12}/> จัดการงานย่อยในโครงการ</p>
+                    </div>
+                    <button onClick={() => setSelectedProjectForTasks(null)} className="p-3 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"><X size={20}/></button>
+                </div>
+
+                {/* Input สำหรับเพิ่ม Task ใหม่ */}
+                <div className="flex gap-2 mb-6">
+                    <input 
+                        type="text" 
+                        placeholder="พิมพ์ชื่อกิจกรรม/งานย่อย..." 
+                        value={newTaskInput}
+                        onChange={(e) => setNewTaskInput(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && addSubTask()}
+                        className="flex-1 p-5 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-orange-200 font-bold text-sm shadow-inner outline-none"
+                    />
+                    <button 
+                        onClick={addSubTask}
+                        className="bg-black text-white p-5 rounded-2xl active:scale-95 transition-all shadow-xl"
+                    >
+                        <Plus size={24} />
+                    </button>
+                </div>
+
+                {/* รายการ Task ทั้งหมด */}
+                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 pb-10">
+                    {selectedProjectForTasks.tasks.length === 0 ? (
+                        <div className="text-center py-10 opacity-30 italic">
+                            <ListTodo size={48} className="mx-auto mb-2" />
+                            <p className="text-sm">ยังไม่มีงานย่อย เพิ่มได้เลยด้านบนครับพี่</p>
+                        </div>
+                    ) : (
+                        selectedProjectForTasks.tasks.map(task => (
+                            <div key={task.id} className="flex items-center gap-4 bg-gray-50 p-4 rounded-3xl border border-gray-100 group">
+                                <button 
+                                    onClick={() => toggleSubTask(task.id)}
+                                    className={`transition-all ${task.completed ? 'text-green-500 scale-110' : 'text-gray-300'}`}
+                                >
+                                    {task.completed ? <CheckCircle2 size={28} /> : <Circle size={28} />}
+                                </button>
+                                <span className={`flex-1 text-sm font-bold ${task.completed ? 'line-through text-gray-400 italic font-medium' : 'text-gray-800'}`}>
+                                    {task.text}
+                                </span>
+                                <button 
+                                    onClick={() => deleteSubTask(task.id)}
+                                    className="text-gray-200 hover:text-red-500 p-1"
+                                >
+                                    <Trash2 size={18} />
+                                </button>
+                            </div>
+                        ))
+                    )}
+                </div>
+                
+                <button 
+                    onClick={() => setSelectedProjectForTasks(null)}
+                    className="w-full bg-orange-600 text-white py-5 rounded-[2rem] font-black shadow-2xl active:scale-95 transition-all uppercase tracking-widest"
+                >
+                    ปิดหน้าต่างนี้
+                </button>
+            </div>
+        </div>
+      )}
+
       {/* Bottom Nav */}
       <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t flex justify-between items-center h-[85px] rounded-t-[2.5rem] px-6 shadow-[0_-5px_20px_rgba(0,0,0,0.05)] max-w-md mx-auto z-50">
         <button onClick={() => setActiveTab('work')} className={`flex flex-col items-center flex-1 transition-all ${activeTab === 'work' ? 'text-orange-600 scale-110 font-bold' : 'text-gray-300'}`}><Briefcase size={24}/><span className="text-[9px] mt-1 font-black uppercase tracking-tight font-bold">งาน</span></button>
@@ -350,7 +513,7 @@ const App = () => {
         <button onClick={() => setActiveTab('health')} className={`flex flex-col items-center flex-1 transition-all ${activeTab === 'health' ? 'text-orange-600 scale-110 font-bold' : 'text-gray-300'}`}><Activity size={24}/><span className="text-[9px] mt-1 font-black uppercase tracking-tight font-bold">สุขภาพ</span></button>
       </div>
 
-      {/* Add Modal */}
+      {/* Add Item Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/70 z-[100] flex items-end animate-fade-in p-4" onClick={() => setShowAddModal(false)}>
           <div className="bg-white w-full max-w-md mx-auto p-8 rounded-[3.5rem] animate-slide-up shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar" onClick={e => e.stopPropagation()}>
