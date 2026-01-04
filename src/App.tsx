@@ -3,11 +3,11 @@ import {
   Calendar, CheckSquare, Activity, Smile, Plus, Droplets, Moon, Coffee, Briefcase, Mail, Bell, LogOut, MapPin, Users, FileText, Wallet, TrendingUp, TrendingDown, Heart, X, Clock, Save, Map, Navigation, StickyNote, PenTool, Search, MoreVertical, Target, ChevronRight, Trash2, PieChart, Info, DollarSign, Sparkles, MessageCircle, Send, Footprints, Scale, BarChart2, Phone, User, MessageSquare, Laugh, AlertCircle, BellRing
 } from 'lucide-react';
 
-// --- Configuration ---
+// --- การตั้งค่า (Configuration) ---
 const apiKey = ""; 
 const GOOGLE_SHEET_ID = '1LC1mBr7ZtAFamAf9zpqT20Cp5g8ySTx5XY1n_14HDDU'; 
 
-// --- Logo Component (2 People hugging/standing together) ---
+// --- ส่วนประกอบโลโก้คนคู่ (App Logo Component) ---
 const AppLogo = ({ size = 80, className = "" }: { size?: number, className?: string }) => {
   return (
     <div 
@@ -24,8 +24,9 @@ const AppLogo = ({ size = 80, className = "" }: { size?: number, className?: str
   );
 };
 
-// --- Types ---
+// --- ประเภทข้อมูล (Types) ---
 interface Todo { id: number; text: string; priority: 'ด่วนมาก' | 'ด่วน' | 'ปกติ'; completed: boolean; deadline?: string; notified?: boolean; }
+interface ProjectTask { id: number; text: string; completed: boolean; }
 interface Project { id: number; name: string; targetArea?: string; quarter?: string; budget?: number; note?: string; }
 interface CalendarEvent { id: number; title: string; startTime: string; endTime?: string; date: string; location?: string; notified?: boolean; }
 interface Transaction { id: number; title: string; amount: number; type: 'income' | 'expense'; date: string; }
@@ -37,14 +38,14 @@ const App = () => {
   const [activeTab, setActiveTab] = useState<'work' | 'memo' | 'finance' | 'health'>('work');
   const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem('p_prompt_login') === 'true');
 
-  // --- Persistent State ---
+  // --- ข้อมูลในเครื่อง (Local Storage 100%) ---
   const [todos, setTodos] = useState<Todo[]>(() => JSON.parse(localStorage.getItem('p_todos') || '[]'));
   const [projects, setProjects] = useState<Project[]>(() => JSON.parse(localStorage.getItem('p_projects') || '[]'));
   const [memos, setMemos] = useState<Memo[]>(() => JSON.parse(localStorage.getItem('p_memos') || '[]'));
   const [transactions, setTransactions] = useState<Transaction[]>(() => JSON.parse(localStorage.getItem('p_trans') || '[]'));
   const [events, setEvents] = useState<CalendarEvent[]>(() => JSON.parse(localStorage.getItem('p_events') || '[]'));
 
-  // Health Stats
+  // สุขภาพ
   const [waterIntake, setWaterIntake] = useState(() => Number(localStorage.getItem('p_water') || 0));
   const [steps, setSteps] = useState(() => Number(localStorage.getItem('p_steps') || 0));
   const [sleepHours, setSleepHours] = useState(() => Number(localStorage.getItem('p_sleep') || 7));
@@ -53,7 +54,7 @@ const App = () => {
   const [mood, setMood] = useState<number | null>(null);
   const [healthStory, setHealthStory] = useState('');
   
-  // UI & Notif States
+  // UI & Notification States
   const [showAddModal, setShowAddModal] = useState(false);
   const [addType, setAddType] = useState<'event' | 'task' | 'project' | 'memo' | 'transaction'>('event');
   const [formData, setFormData] = useState<any>({ color: 'bg-yellow-100', priority: 'ปกติ', quarter: '1' });
@@ -65,7 +66,7 @@ const App = () => {
   const [notifPermission, setNotifPermission] = useState(typeof Notification !== 'undefined' ? Notification.permission : 'denied');
   const [activeAlerts, setActiveAlerts] = useState<CalendarEvent[]>([]);
 
-  // --- Auto-Save ---
+  // --- ระบบบันทึกอัตโนมัติ ---
   useEffect(() => {
     localStorage.setItem('p_todos', JSON.stringify(todos));
     localStorage.setItem('p_projects', JSON.stringify(projects));
@@ -80,7 +81,7 @@ const App = () => {
     localStorage.setItem('p_prompt_login', String(isLoggedIn));
   }, [todos, projects, memos, transactions, events, waterIntake, steps, sleepHours, weight, height, isLoggedIn]);
 
-  // --- Notification Engine (เช็กทุก 30 วินาที) ---
+  // --- ระบบแจ้งเตือน 15 นาที ---
   useEffect(() => {
     const timer = setInterval(() => {
       const now = new Date();
@@ -95,8 +96,8 @@ const App = () => {
 
           if (diff <= 15 && diff >= 0) {
             if ("Notification" in window && Notification.permission === "granted") {
-              new Notification(`นัดหมายใกล้ถึงเวลา!`, {
-                body: `${event.title} (เริ่ม ${event.startTime} น.)`,
+              new Notification(`นัดหมายสำคัญ: ${event.title}`, {
+                body: `จะเริ่มในอีก ${diff} นาที (${event.startTime} น.)`,
                 icon: "https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png"
               });
             }
@@ -135,7 +136,6 @@ const App = () => {
     }
   }, [isLoggedIn]);
 
-  // --- BMI Calculation ---
   const calculateBMIValue = () => {
     const hInMeter = height / 100;
     return hInMeter > 0 ? (weight / (hInMeter * hInMeter)).toFixed(1) : '0';
@@ -143,9 +143,9 @@ const App = () => {
 
   const getBMIStatusInfo = (bmi: number) => {
     if (bmi < 18.5) return { text: 'ผอมไปนิด', color: 'text-blue-500', bg: 'bg-blue-100' };
-    if (bmi < 23) return { text: 'หุ่นดีมาก', color: 'text-green-500', bg: 'bg-green-100' };
-    if (bmi < 25) return { text: 'เริ่มท้วม', color: 'text-yellow-600', bg: 'bg-yellow-100' };
-    return { text: 'น้ำหนักเกิน', color: 'text-red-600', bg: 'bg-red-100' };
+    if (bmi < 23) return { text: 'หุ่นดีมากครับ', color: 'text-green-500', bg: 'bg-green-100' };
+    if (bmi < 25) return { text: 'เริ่มท้วมแล้วนะ', color: 'text-yellow-600', bg: 'bg-yellow-100' };
+    return { text: 'น้ำหนักเกินครับ', color: 'text-red-600', bg: 'bg-red-100' };
   };
 
   const handleSaveItem = () => {
@@ -177,12 +177,12 @@ const App = () => {
     if (!mood || !healthStory) return;
     setIsAnalyzing(true);
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-    const prompt = `คุณคือ "พี่พร้อม" ผู้ช่วยพัฒนากรจังหวัดสุราษฎร์ธานี ใจดี อบอุ่น น้องบอกอารมณ์ ${mood}/5 และบอกว่า "${healthStory}" ช่วยให้กำลังใจสั้นๆ 2 ประโยค ตบท้ายด้วย emoji`;
+    const prompt = `คุณคือ "พี่พร้อม" ผู้ช่วยรุ่นพี่พัฒนากรจังหวัดสุราษฎร์ธานี ใจดี อบอุ่น น้องระบายเรื่อง "${healthStory}" (อารมณ์ ${mood}/5) ช่วยตอบให้กำลังใจสั้นๆ 2 ประโยค ตบท้ายด้วย emoji`;
     try {
       const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) });
       const res = await response.json();
       setAiResponse(res.candidates?.[0]?.content?.parts?.[0]?.text);
-    } catch { setAiResponse("พี่พร้อมส่งกำลังใจให้พี่เสมอครับ สู้ๆ! ❤️"); }
+    } catch { setAiResponse("พี่พร้อมอยู่ข้างๆ เสมอนะครับ พักผ่อนบ้างนะพี่ สู้ๆ! ❤️"); }
     setIsAnalyzing(false);
     setHealthStory('');
     setMood(null);
@@ -194,7 +194,7 @@ const App = () => {
         <div className="absolute top-[-10%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
         <div className="mb-8 transform hover:scale-110 transition-transform duration-500"><AppLogo size={140} /></div>
         <h1 className="text-4xl font-black mb-2 tracking-tighter drop-shadow-lg uppercase">พี่พร้อม</h1>
-        <p className="mb-12 opacity-90 font-medium text-lg italic text-orange-100 uppercase tracking-widest">"เพื่อนคู่คิด ไปไหนไปกัน"</p>
+        <p className="mb-12 opacity-90 font-medium text-lg italic text-orange-100">"เพื่อนคู่คิด ไปไหนไปกัน"</p>
         <button onClick={() => setIsLoggedIn(true)} className="bg-black text-white px-12 py-5 rounded-[2.5rem] font-black w-full max-w-xs shadow-2xl active:scale-95 transition-all text-xl uppercase tracking-widest border-b-4 border-gray-800">เริ่มใช้งาน</button>
       </div>
     );
@@ -211,7 +211,7 @@ const App = () => {
               <div className="flex items-center gap-3">
                 <div className="bg-white/20 p-2 rounded-xl animate-pulse"><Bell size={20}/></div>
                 <div>
-                  <p className="text-[10px] font-black uppercase opacity-80 tracking-widest leading-none mb-1">ใกล้ถึงเวลานัด!</p>
+                  <p className="text-[10px] font-black uppercase opacity-80 tracking-widest">นัดหมายใกล้ถึงเวลา!</p>
                   <p className="text-sm font-bold tracking-tight">{alert.title}</p>
                 </div>
               </div>
@@ -221,7 +221,7 @@ const App = () => {
         </div>
       )}
 
-      {/* Header */}
+      {/* Header with 2 People Logo */}
       <div className="bg-white/95 backdrop-blur-md p-4 flex justify-between items-center sticky top-0 z-40 border-b border-gray-100 shadow-sm">
         <div className="flex items-center gap-3">
           <AppLogo size={50} className="rounded-2xl shadow-md" />
@@ -239,13 +239,14 @@ const App = () => {
       <div className="h-full overflow-y-auto custom-scrollbar pb-32">
         {activeTab === 'work' && (
           <div className="p-4 space-y-6 animate-fade-in">
+            {/* ปุ่ม Activate แจ้งเตือน (Indigo Card) */}
             {notifPermission !== 'granted' && (
-               <div className="p-5 bg-indigo-600 text-white rounded-[2rem] flex items-start gap-4 shadow-xl relative overflow-hidden">
+               <div className="p-5 bg-indigo-600 text-white rounded-[2.5rem] flex items-start gap-4 shadow-xl relative overflow-hidden">
                   <div className="absolute right-[-10px] top-[-10px] opacity-10"><Bell size={80} /></div>
                   <AlertCircle className="shrink-0 mt-1" size={24} />
                   <div className="flex-1 relative z-10">
-                      <p className="text-sm font-black mb-1 uppercase leading-none">เปิดแจ้งเตือนไหมครับ?</p>
-                      <p className="text-[10px] opacity-80 mb-4 font-medium leading-relaxed">ผมจะคอยสะกิดเตือนล่วงหน้า 15 นาที ไม่ให้พี่พลาดงานสำคัญครับ</p>
+                      <p className="text-sm font-black mb-1 uppercase tracking-tight">เปิดแจ้งเตือนไหมครับ?</p>
+                      <p className="text-[10px] opacity-80 mb-4 font-medium leading-relaxed">ผมจะคอยสะกิดเตือนเวลามีนัดล่วงหน้า 15 นาที ไม่ให้พี่พลาดงานสำคัญครับ</p>
                       <button onClick={handleRequestPermission} className="bg-white text-indigo-600 px-6 py-2 rounded-xl text-[10px] font-black uppercase shadow-lg active:scale-95 transition-all">เปิดเลยครับ</button>
                   </div>
                </div>
@@ -296,7 +297,7 @@ const App = () => {
                   <div key={t.id} className="bg-white p-4 rounded-2xl border border-gray-100 flex items-center gap-4 shadow-sm group">
                     <input type="checkbox" checked={t.completed} onChange={() => setTodos(todos.map(item => item.id === t.id ? {...item, completed: !item.completed} : item))} className="w-6 h-6 accent-orange-500 rounded-md cursor-pointer"/>
                     <div className="flex-1">
-                      <span className={`text-sm block ${t.completed ? 'line-through text-gray-300' : 'text-gray-800 font-bold leading-tight'}`}>{t.text}</span>
+                      <span className={`text-sm block ${t.completed ? 'line-through text-gray-300' : 'text-gray-800 font-bold'}`}>{t.text}</span>
                       <div className="flex gap-2 mt-1">
                         <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full border ${
                           t.priority === 'ด่วนมาก' ? 'bg-red-50 text-red-600 border-red-100' : 
@@ -305,7 +306,7 @@ const App = () => {
                         }`}>{t.priority}</span>
                       </div>
                     </div>
-                    <button onClick={() => deleteItem('todo', t.id)} className="text-gray-200 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16}/></button>
+                    <button onClick={() => deleteItem('todo', t.id)} className="text-gray-200 hover:text-red-500 p-1 transition-colors opacity-0 group-hover:opacity-100"><Trash2 size={16}/></button>
                   </div>
                 ))}
               </div>
@@ -313,12 +314,13 @@ const App = () => {
           </div>
         )}
 
+        {/* Tab อื่นๆ ยังคงเดิมตาม Master Version */}
         {activeTab === 'memo' && (
           <div className="p-4 grid grid-cols-2 gap-3 animate-fade-in">
             {memos.map(m => (
               <div key={m.id} className={`${m.color} p-5 rounded-[2.5rem] relative shadow-sm border border-black/5 min-h-[180px] flex flex-col hover:rotate-2 transition-transform`}>
                 <button onClick={() => deleteItem('memo', m.id)} className="absolute top-3 right-3 text-black/10 hover:text-black/30"><X size={16}/></button>
-                <h4 className="font-bold text-sm mb-2 text-gray-800 leading-tight">{m.title}</h4>
+                <h4 className="font-bold text-sm mb-2 text-gray-800 leading-tight font-bold">{m.title}</h4>
                 <p className="text-[11px] text-gray-600 line-clamp-6 leading-relaxed font-medium flex-1">{m.content}</p>
                 <p className="text-[8px] font-black text-black/20 mt-2 uppercase tracking-tighter text-right">{m.date}</p>
               </div>
@@ -331,7 +333,7 @@ const App = () => {
           <div className="p-4 space-y-6 animate-fade-in">
             <div className="bg-gray-900 text-white p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full -mr-16 -mt-16 blur-2xl"></div>
-              <p className="text-[10px] text-gray-400 mb-2 uppercase tracking-widest font-black">Financial Status</p>
+              <p className="text-[10px] text-gray-400 mb-2 uppercase tracking-widest font-black">Financial Summary</p>
               <h2 className="text-4xl font-black tracking-tighter">฿ {transactions.reduce((acc, curr) => curr.type === 'income' ? acc + curr.amount : acc - curr.amount, 0).toLocaleString()}</h2>
               <div className="flex gap-3 mt-8">
                 <div className="flex-1 bg-white/5 p-3 rounded-2xl border border-white/10 backdrop-blur-sm text-center">
@@ -346,22 +348,14 @@ const App = () => {
             </div>
             <div className="space-y-2">
               {transactions.map(t => (
-                <div key={t.id} className="bg-white p-4 rounded-2xl flex justify-between items-center shadow-sm border border-gray-100 active:scale-[0.98] transition-all">
+                <div key={t.id} className="bg-white p-4 rounded-2xl flex justify-between items-center shadow-sm border border-gray-100">
                   <div className="flex items-center gap-3">
                     <div className={`p-2.5 rounded-xl ${t.type === 'income' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}>
                       {t.type === 'income' ? <TrendingUp size={18}/> : <TrendingDown size={18}/>}
                     </div>
-                    <div>
-                      <p className="font-bold text-sm tracking-tight text-gray-800 leading-tight">{t.title}</p>
-                      <p className="text-[10px] text-gray-400 font-bold uppercase">{t.date}</p>
-                    </div>
+                    <div><p className="font-bold text-sm text-gray-800">{t.title}</p><p className="text-[10px] text-gray-400 uppercase">{t.date}</p></div>
                   </div>
-                  <div className="text-right">
-                    <p className={`font-black text-sm tracking-tighter ${t.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
-                      {t.type === 'income' ? '+' : '-'}{t.amount.toLocaleString()}
-                    </p>
-                    <button onClick={() => deleteItem('trans', t.id)} className="text-[10px] text-gray-300 hover:text-red-500 font-black uppercase tracking-widest mt-1">ลบ</button>
-                  </div>
+                  <p className={`font-black text-sm ${t.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>{t.type === 'income' ? '+' : '-'}{t.amount.toLocaleString()}</p>
                 </div>
               ))}
             </div>
@@ -371,7 +365,7 @@ const App = () => {
         {activeTab === 'health' && (
           <div className="p-4 space-y-6 animate-fade-in pb-32">
             <section className="bg-white p-8 rounded-[3rem] shadow-sm border border-gray-100 text-center relative overflow-hidden">
-              <Smile size={48} className="mx-auto text-orange-500 mb-6 shadow-inner" />
+              <Smile size={48} className="mx-auto text-orange-500 mb-6" />
               <h3 className="font-black text-gray-800 tracking-tight uppercase tracking-widest">วันนี้รู้สึกอย่างไรบ้าง?</h3>
               <div className="flex justify-center gap-3 mt-6">
                 {[1,2,3,4,5].map(lv => (
@@ -385,7 +379,7 @@ const App = () => {
                 {isAnalyzing ? <><Sparkles className="animate-spin" size={20}/> พี่พร้อมกำลังฟัง...</> : <><Send size={20}/> ส่งให้พี่พร้อม</>}
               </button>
             </section>
-
+            
             {aiResponse && (
               <div className="bg-indigo-600 text-white p-7 rounded-[2.5rem] shadow-2xl animate-slide-up relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-4 opacity-10"><MessageCircle size={100}/></div>
@@ -404,7 +398,6 @@ const App = () => {
                    <button onClick={() => setWaterIntake(w => Math.min(12, w + 1))} className="flex-1 bg-white/40 hover:bg-white/50 text-white py-2 rounded-xl text-xs font-black">+</button>
                 </div>
               </div>
-              
               <div className="bg-stone-900 text-white p-6 rounded-[2.5rem] shadow-lg relative overflow-hidden">
                 <Moon className="absolute right-[-10px] bottom-[-10px] opacity-10" size={100}/>
                 <p className="text-[10px] font-black mb-1 opacity-80 uppercase tracking-widest">การนอน</p>
@@ -414,16 +407,14 @@ const App = () => {
                    <button onClick={() => setSleepHours(s => Math.min(12, s + 0.5))} className="flex-1 bg-white/40 hover:bg-white/50 text-white py-2 rounded-xl text-xs font-black">+</button>
                 </div>
               </div>
-
               <div className="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm col-span-2">
                 <div className="flex justify-between items-center mb-2">
                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">ก้าวเดินวันนี้</p>
                    <Footprints size={16} className="text-orange-500" />
                 </div>
-                <div className="flex items-end gap-1"><span className="text-3xl font-black text-gray-800 tracking-tighter">{steps.toLocaleString()}</span><span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">/ 10k ก้าว</span></div>
+                <div className="flex items-end gap-1"><span className="text-3xl font-black text-gray-800 tracking-tighter">{steps.toLocaleString()}</span><span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">/ 10k steps</span></div>
                 <input type="range" min="0" max="15000" step="500" value={steps} onChange={(e) => setSteps(Number(e.target.value))} className="w-full mt-4 accent-orange-500 h-1.5 bg-gray-100 rounded-full appearance-none cursor-pointer"/>
               </div>
-
               <div className="bg-emerald-900 text-white p-7 rounded-[2.5rem] shadow-xl col-span-2 relative overflow-hidden group">
                  <Scale className="absolute right-[-20px] top-[-20px] opacity-10" size={120}/>
                  <h4 className="text-[10px] font-black uppercase tracking-widest mb-6 opacity-80 flex items-center gap-2 font-bold"><Scale size={14}/> Body & BMI Status</h4>
@@ -474,7 +465,7 @@ const App = () => {
         <div className="fixed inset-0 bg-black/70 z-[100] flex items-end animate-fade-in p-4" onClick={() => setShowAddModal(false)}>
           <div className="bg-white w-full max-w-md mx-auto p-8 rounded-[3.5rem] animate-slide-up shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-8 px-2">
-              <h3 className="font-black text-xl uppercase tracking-tighter tracking-widest">เพิ่มรายการใหม่</h3>
+              <h3 className="font-black text-xl uppercase tracking-widest tracking-tighter">เพิ่มรายการใหม่</h3>
               <button onClick={() => setShowAddModal(false)} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"><X size={20}/></button>
             </div>
             
