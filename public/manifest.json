@@ -1,0 +1,24 @@
+{
+  "name": "P'Prompt พี่พร้อม ",
+  "short_name": "พี่พร้อม",
+  "description": "เพื่อนคู่คิด ไปไหนไปกัน",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ea580c",
+  "theme_color": "#ea580c",
+  "icons": [
+    {
+      "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPScxOTInIGhlaWdodD0nMTkyJyB2aWV3Qm94PScwIDAgMTkyIDE5Mic+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSdnJyB4MT0nMCcgeTE9JzAnIHgyPScxJyB5Mj0nMSc+PHN0b3Agb2Zmc2V0PScwJScgc3RvcC1jb2xvcj0nI2ZiOTIzYycvPjxzdG9wIG9mZnNldD0nMTAwJScgc3RvcC1jb2xvcj0nI2VhNTgwYycvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHdpZHRoPScxOTInIGhlaWdodD0nMTkyJyByeD0nNDgnIGZpbGw9J3VybCgjZyknLz48ZyBmaWxsPSd3aGl0ZScgdHJhbnNmb3JtPSd0cmFuc2xhdGUoNDYsIDU2KSBzY2FsZSg0KSc+PHBhdGggZD0nTTE2IDIxdi0yYTQgNCAwIDAgMC00LTRINWE0IDQgMCAwIDAtNCA0djInLz48Y2lyY2xlIGN4PSc4LjUnIGN5PSc3JyByPSc0Jy8+PHBhdGggZD0nTTIyIDIxdi0yYTQgNCAwIDAgMC0zLTMuODcnLz48cGF0aCBkPSdNMTYgMy4xM2E0IDQgMCAwIDEgMCA3Ljc1Jy8+PC9nPjwvc3ZnPg==",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc1MTInIGhlaWdodD0nNTEyJyB2aWV3Qm94PScwIDAgNTEyIDUxMic+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSdnJyB4MT0nMCcgeTE9JzAnIHgyPScxJyB5Mj0nMSc+PHN0b3Agb2Zmc2V0PScwJScgc3RvcC1jb2xvcj0nI2ZiOTIzYycvPjxzdG9wIG9mZnNldD0nMTAwJScgc3RvcC1jb2xvcj0nI2VhNTgwYycvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHdpZHRoPSc1MTInIGhlaWdodD0nNTEyJyByeD0nMTI4JyBmaWxsPSd1cmwoI2cpJy8+PGcgZmlsbD0nd2hpdGUnIHRyYW5zZm9ybT0ndHJhbnNsYXRlKDEyMCwgMTUwKSBzY2FsZSgxMSknPjxwYXRoIGQ9J00xNiAyMXYtMmE0IDQgMCAwIDAtNC00SDVh0IDQgMCAwIDAtNCA0djInLz48Y2lyY2xlIGN4PSc4LjUnIGN5PSc3JyByPSc0Jy8+PHBhdGggZD0nTTIyIDIxdi0yYTQgNCAwIDAgMC0zLTMuODcnLz48cGF0aCBkPSdNMTYgMy4xM2E0IDQgMCAwIDEgMCA3Ljc1Jy8+PC9nPjwvc3ZnPg==",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
