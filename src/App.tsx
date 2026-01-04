@@ -7,7 +7,7 @@ import {
 const apiKey = ""; 
 const GOOGLE_SHEET_ID = '1LC1mBr7ZtAFamAf9zpqT20Cp5g8ySTx5XY1n_14HDDU'; 
 
-// --- Logo Component (2 People - Modern Minimalist) ---
+// --- Logo Component (2 People hugging/standing together) ---
 const AppLogo = ({ size = 80, className = "" }: { size?: number, className?: string }) => {
   return (
     <div 
@@ -26,7 +26,7 @@ const AppLogo = ({ size = 80, className = "" }: { size?: number, className?: str
 
 // --- Types ---
 interface Todo { id: number; text: string; priority: 'ด่วนมาก' | 'ด่วน' | 'ปกติ'; completed: boolean; deadline?: string; notified?: boolean; }
-interface Project { id: number; name: string; targetArea?: string; quarter?: string; budget?: number; note?: string; notified?: boolean; }
+interface Project { id: number; name: string; targetArea?: string; quarter?: string; budget?: number; note?: string; }
 interface CalendarEvent { id: number; title: string; startTime: string; endTime?: string; date: string; location?: string; notified?: boolean; }
 interface Transaction { id: number; title: string; amount: number; type: 'income' | 'expense'; date: string; }
 interface Memo { id: number; title: string; content: string; color: string; date: string; }
@@ -44,7 +44,7 @@ const App = () => {
   const [transactions, setTransactions] = useState<Transaction[]>(() => JSON.parse(localStorage.getItem('p_trans') || '[]'));
   const [events, setEvents] = useState<CalendarEvent[]>(() => JSON.parse(localStorage.getItem('p_events') || '[]'));
 
-  // Health Stats (Persistent)
+  // Health Stats
   const [waterIntake, setWaterIntake] = useState(() => Number(localStorage.getItem('p_water') || 0));
   const [steps, setSteps] = useState(() => Number(localStorage.getItem('p_steps') || 0));
   const [sleepHours, setSleepHours] = useState(() => Number(localStorage.getItem('p_sleep') || 7));
@@ -53,7 +53,7 @@ const App = () => {
   const [mood, setMood] = useState<number | null>(null);
   const [healthStory, setHealthStory] = useState('');
   
-  // UI States
+  // UI & Notif States
   const [showAddModal, setShowAddModal] = useState(false);
   const [addType, setAddType] = useState<'event' | 'task' | 'project' | 'memo' | 'transaction'>('event');
   const [formData, setFormData] = useState<any>({ color: 'bg-yellow-100', priority: 'ปกติ', quarter: '1' });
@@ -65,7 +65,7 @@ const App = () => {
   const [notifPermission, setNotifPermission] = useState(typeof Notification !== 'undefined' ? Notification.permission : 'denied');
   const [activeAlerts, setActiveAlerts] = useState<CalendarEvent[]>([]);
 
-  // --- Auto-Save Mechanism ---
+  // --- Auto-Save ---
   useEffect(() => {
     localStorage.setItem('p_todos', JSON.stringify(todos));
     localStorage.setItem('p_projects', JSON.stringify(projects));
@@ -80,7 +80,7 @@ const App = () => {
     localStorage.setItem('p_prompt_login', String(isLoggedIn));
   }, [todos, projects, memos, transactions, events, waterIntake, steps, sleepHours, weight, height, isLoggedIn]);
 
-  // --- Notification Engine (15 mins Check) ---
+  // --- Notification Engine (เช็กทุก 30 วินาที) ---
   useEffect(() => {
     const timer = setInterval(() => {
       const now = new Date();
@@ -95,8 +95,8 @@ const App = () => {
 
           if (diff <= 15 && diff >= 0) {
             if ("Notification" in window && Notification.permission === "granted") {
-              new Notification(`ถึงเวลานัดหมายครับพี่: ${event.title}`, {
-                body: `จะเริ่มในอีก ${diff} นาที (${event.startTime} น.)`,
+              new Notification(`นัดหมายใกล้ถึงเวลา!`, {
+                body: `${event.title} (เริ่ม ${event.startTime} น.)`,
                 icon: "https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png"
               });
             }
@@ -135,7 +135,7 @@ const App = () => {
     }
   }, [isLoggedIn]);
 
-  // --- Health Logics (BMI) ---
+  // --- BMI Calculation ---
   const calculateBMIValue = () => {
     const hInMeter = height / 100;
     return hInMeter > 0 ? (weight / (hInMeter * hInMeter)).toFixed(1) : '0';
@@ -143,10 +143,9 @@ const App = () => {
 
   const getBMIStatusInfo = (bmi: number) => {
     if (bmi < 18.5) return { text: 'ผอมไปนิด', color: 'text-blue-500', bg: 'bg-blue-100' };
-    if (bmi < 23) return { text: 'หุ่นดีมากครับ', color: 'text-green-500', bg: 'bg-green-100' };
-    if (bmi < 25) return { text: 'เริ่มท้วมแล้วนะ', color: 'text-yellow-600', bg: 'bg-yellow-100' };
-    if (bmi < 30) return { text: 'น้ำหนักเกินครับ', color: 'text-orange-600', bg: 'bg-orange-100' };
-    return { text: 'ต้องลดน้ำหนักด่วน', color: 'text-red-600', bg: 'bg-red-100' };
+    if (bmi < 23) return { text: 'หุ่นดีมาก', color: 'text-green-500', bg: 'bg-green-100' };
+    if (bmi < 25) return { text: 'เริ่มท้วม', color: 'text-yellow-600', bg: 'bg-yellow-100' };
+    return { text: 'น้ำหนักเกิน', color: 'text-red-600', bg: 'bg-red-100' };
   };
 
   const handleSaveItem = () => {
@@ -178,12 +177,12 @@ const App = () => {
     if (!mood || !healthStory) return;
     setIsAnalyzing(true);
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-    const prompt = `คุณคือ "พี่พร้อม" ผู้ช่วยรุ่นพี่พัฒนากรจังหวัดสุราษฎร์ธานี ใจดี อบอุ่น ขี้เล่นนิดๆ น้องพัฒนากรบอกว่าเจอเรื่องนี้มา: "${healthStory}" (อารมณ์ ${mood}/5) ช่วยตอบให้กำลังใจสั้นๆ 2 ประโยค ตบท้ายด้วย emoji`;
+    const prompt = `คุณคือ "พี่พร้อม" ผู้ช่วยพัฒนากรจังหวัดสุราษฎร์ธานี ใจดี อบอุ่น น้องบอกอารมณ์ ${mood}/5 และบอกว่า "${healthStory}" ช่วยให้กำลังใจสั้นๆ 2 ประโยค ตบท้ายด้วย emoji`;
     try {
       const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) });
       const res = await response.json();
       setAiResponse(res.candidates?.[0]?.content?.parts?.[0]?.text);
-    } catch { setAiResponse("พี่พร้อมอยู่ข้างๆ เสมอนะครับ พักผ่อนบ้างนะพี่ สู้ๆ! ❤️"); }
+    } catch { setAiResponse("พี่พร้อมส่งกำลังใจให้พี่เสมอครับ สู้ๆ! ❤️"); }
     setIsAnalyzing(false);
     setHealthStory('');
     setMood(null);
@@ -191,13 +190,12 @@ const App = () => {
 
   if (!isLoggedIn) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen bg-orange-600 text-white p-6 relative overflow-hidden text-center">
+      <div className="flex flex-col items-center justify-center h-screen bg-orange-600 text-white p-6 text-center relative overflow-hidden">
         <div className="absolute top-[-10%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
         <div className="mb-8 transform hover:scale-110 transition-transform duration-500"><AppLogo size={140} /></div>
-        <h1 className="text-4xl font-black mb-2 tracking-tighter drop-shadow-lg uppercase tracking-widest">พี่พร้อม</h1>
-        <p className="mb-12 opacity-90 font-medium text-lg italic text-orange-100">"เพื่อนคู่คิด ไปไหนไปกัน"</p>
+        <h1 className="text-4xl font-black mb-2 tracking-tighter drop-shadow-lg uppercase">พี่พร้อม</h1>
+        <p className="mb-12 opacity-90 font-medium text-lg italic text-orange-100 uppercase tracking-widest">"เพื่อนคู่คิด ไปไหนไปกัน"</p>
         <button onClick={() => setIsLoggedIn(true)} className="bg-black text-white px-12 py-5 rounded-[2.5rem] font-black w-full max-w-xs shadow-2xl active:scale-95 transition-all text-xl uppercase tracking-widest border-b-4 border-gray-800">เริ่มใช้งาน</button>
-        <p className="absolute bottom-10 text-[10px] opacity-60 font-bold uppercase tracking-widest">P'Prompt Community Edition v2.0</p>
       </div>
     );
   }
@@ -213,7 +211,7 @@ const App = () => {
               <div className="flex items-center gap-3">
                 <div className="bg-white/20 p-2 rounded-xl animate-pulse"><Bell size={20}/></div>
                 <div>
-                  <p className="text-[10px] font-black uppercase opacity-80 tracking-widest">นัดหมายสำคัญ!</p>
+                  <p className="text-[10px] font-black uppercase opacity-80 tracking-widest leading-none mb-1">ใกล้ถึงเวลานัด!</p>
                   <p className="text-sm font-bold tracking-tight">{alert.title}</p>
                 </div>
               </div>
@@ -226,7 +224,7 @@ const App = () => {
       {/* Header */}
       <div className="bg-white/95 backdrop-blur-md p-4 flex justify-between items-center sticky top-0 z-40 border-b border-gray-100 shadow-sm">
         <div className="flex items-center gap-3">
-          <AppLogo size={50} className="rounded-2xl" />
+          <AppLogo size={50} className="rounded-2xl shadow-md" />
           <div className="flex flex-col">
             <h2 className="text-lg font-black text-gray-900 leading-tight tracking-tight uppercase">พี่พร้อม</h2>
             <p className="text-[10px] text-orange-600 font-black uppercase tracking-widest leading-none">P'Prompt Surat</p>
@@ -241,13 +239,24 @@ const App = () => {
       <div className="h-full overflow-y-auto custom-scrollbar pb-32">
         {activeTab === 'work' && (
           <div className="p-4 space-y-6 animate-fade-in">
-            {/* นัดหมาย */}
+            {notifPermission !== 'granted' && (
+               <div className="p-5 bg-indigo-600 text-white rounded-[2rem] flex items-start gap-4 shadow-xl relative overflow-hidden">
+                  <div className="absolute right-[-10px] top-[-10px] opacity-10"><Bell size={80} /></div>
+                  <AlertCircle className="shrink-0 mt-1" size={24} />
+                  <div className="flex-1 relative z-10">
+                      <p className="text-sm font-black mb-1 uppercase leading-none">เปิดแจ้งเตือนไหมครับ?</p>
+                      <p className="text-[10px] opacity-80 mb-4 font-medium leading-relaxed">ผมจะคอยสะกิดเตือนล่วงหน้า 15 นาที ไม่ให้พี่พลาดงานสำคัญครับ</p>
+                      <button onClick={handleRequestPermission} className="bg-white text-indigo-600 px-6 py-2 rounded-xl text-[10px] font-black uppercase shadow-lg active:scale-95 transition-all">เปิดเลยครับ</button>
+                  </div>
+               </div>
+            )}
+
             <section>
               <h3 className="font-black text-gray-800 mb-3 flex items-center gap-2 uppercase tracking-tight text-sm"><Calendar size={18} className="text-orange-500"/> นัดหมายวันนี้</h3>
               <div className="space-y-2">
-                {events.length === 0 ? <p className="text-center text-gray-400 text-sm py-8 border-2 border-dashed border-gray-100 rounded-3xl italic">ไม่มีนัดหมายใหม่</p> : 
+                {events.length === 0 ? <p className="text-center text-gray-400 text-sm py-8 italic border-2 border-dashed border-gray-100 rounded-2xl">ไม่มีนัดหมายใหม่</p> : 
                   events.map(e => (
-                    <div key={e.id} className="bg-white p-4 rounded-2xl border border-gray-100 flex justify-between items-center shadow-sm border-l-4 border-l-orange-500 active:scale-[0.98] transition-all">
+                    <div key={e.id} className="bg-white p-4 rounded-2xl border border-gray-100 flex justify-between items-center shadow-sm border-l-4 border-l-orange-500 transition-all active:scale-[0.98]">
                       <div className="flex-1">
                         <p className="font-bold text-sm text-gray-800 leading-tight">{e.title}</p>
                         <p className="text-[10px] text-gray-500 font-black uppercase mt-1 flex items-center gap-1">
@@ -261,7 +270,6 @@ const App = () => {
               </div>
             </section>
 
-            {/* โครงการ */}
             <section>
               <h3 className="font-black text-gray-800 mb-3 flex items-center gap-2 uppercase tracking-tight text-sm"><Briefcase size={18} className="text-orange-500"/> โครงการ</h3>
               <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide">
@@ -281,7 +289,6 @@ const App = () => {
               </div>
             </section>
 
-            {/* งานต้องทำ */}
             <section>
               <h3 className="font-black text-gray-800 mb-3 flex items-center gap-2 uppercase tracking-tight text-sm"><CheckSquare size={18} className="text-orange-500"/> งานต้องทำ</h3>
               <div className="space-y-2">
@@ -363,10 +370,9 @@ const App = () => {
 
         {activeTab === 'health' && (
           <div className="p-4 space-y-6 animate-fade-in pb-32">
-            {/* Mood Input */}
             <section className="bg-white p-8 rounded-[3rem] shadow-sm border border-gray-100 text-center relative overflow-hidden">
-              <div className="bg-orange-50 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6 text-orange-500 shadow-inner"><Smile size={32} /></div>
-              <h3 className="font-black text-gray-800 tracking-tight uppercase tracking-widest">วันนี้รู้สึกอย่างไรบ้างครับ?</h3>
+              <Smile size={48} className="mx-auto text-orange-500 mb-6 shadow-inner" />
+              <h3 className="font-black text-gray-800 tracking-tight uppercase tracking-widest">วันนี้รู้สึกอย่างไรบ้าง?</h3>
               <div className="flex justify-center gap-3 mt-6">
                 {[1,2,3,4,5].map(lv => (
                   <button key={lv} onClick={() => setMood(lv)} className={`text-4xl p-3 rounded-2xl transition-all ${mood === lv ? 'bg-orange-50 scale-125 shadow-md border-2 border-orange-200' : 'grayscale opacity-30'}`}>
@@ -376,79 +382,74 @@ const App = () => {
               </div>
               <textarea value={healthStory} onChange={e => setHealthStory(e.target.value)} placeholder="ระบายความในใจให้พี่พร้อมฟังได้นะ..." className="w-full mt-6 p-5 bg-gray-50 rounded-[2rem] border-none focus:ring-2 focus:ring-orange-200 text-sm h-32 resize-none shadow-inner font-medium"></textarea>
               <button onClick={handleHealthSubmit} disabled={isAnalyzing} className="w-full mt-4 bg-black text-white py-5 rounded-[2rem] font-black shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all uppercase tracking-widest">
-                {isAnalyzing ? <><Sparkles className="animate-spin" size={20}/> กำลังฟังพี่อยู่...</> : <><Send size={20}/> ส่งให้พี่พร้อม</>}
+                {isAnalyzing ? <><Sparkles className="animate-spin" size={20}/> พี่พร้อมกำลังฟัง...</> : <><Send size={20}/> ส่งให้พี่พร้อม</>}
               </button>
             </section>
 
             {aiResponse && (
               <div className="bg-indigo-600 text-white p-7 rounded-[2.5rem] shadow-2xl animate-slide-up relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-4 opacity-10"><MessageCircle size={100}/></div>
-                <h4 className="font-black text-[10px] mb-2 uppercase opacity-80 flex items-center gap-1 tracking-widest"><Sparkles size={12}/> Message from P'Prompt</h4>
+                <h4 className="font-black text-[10px] mb-2 uppercase opacity-80 flex items-center gap-1 tracking-widest font-bold"><Sparkles size={12}/> Message from P'Prompt</h4>
                 <p className="text-sm font-bold leading-relaxed">"{aiResponse}"</p>
               </div>
             )}
 
-            {/* Health Grid */}
             <div className="grid grid-cols-2 gap-4">
-              {/* Water Tracking */}
               <div className="bg-blue-600 text-white p-6 rounded-[2.5rem] shadow-lg relative overflow-hidden">
                 <Droplets className="absolute right-[-10px] bottom-[-10px] opacity-20" size={100}/>
                 <p className="text-[10px] font-black mb-1 opacity-80 uppercase tracking-widest">ดื่มน้ำ</p>
                 <div className="flex items-end gap-1"><span className="text-4xl font-black">{waterIntake}</span><span className="text-[10px] font-black opacity-60">/ 8 แก้ว</span></div>
                 <div className="flex gap-2 mt-4 relative z-10">
-                   <button onClick={() => setWaterIntake(w => Math.max(0, w - 1))} className="flex-1 bg-white/20 hover:bg-white/30 text-white py-2 rounded-xl text-xs font-black transition-all">-</button>
-                   <button onClick={() => setWaterIntake(w => Math.min(12, w + 1))} className="flex-1 bg-white/40 hover:bg-white/50 text-white py-2 rounded-xl text-xs font-black transition-all">+</button>
+                   <button onClick={() => setWaterIntake(w => Math.max(0, w - 1))} className="flex-1 bg-white/20 hover:bg-white/30 text-white py-2 rounded-xl text-xs font-black">-</button>
+                   <button onClick={() => setWaterIntake(w => Math.min(12, w + 1))} className="flex-1 bg-white/40 hover:bg-white/50 text-white py-2 rounded-xl text-xs font-black">+</button>
                 </div>
               </div>
               
-              {/* Sleep Tracking */}
               <div className="bg-stone-900 text-white p-6 rounded-[2.5rem] shadow-lg relative overflow-hidden">
                 <Moon className="absolute right-[-10px] bottom-[-10px] opacity-10" size={100}/>
-                <p className="text-[10px] font-black mb-1 opacity-80 uppercase tracking-widest">นอนหลับ</p>
+                <p className="text-[10px] font-black mb-1 opacity-80 uppercase tracking-widest">การนอน</p>
                 <div className="flex items-end gap-1"><span className="text-4xl font-black">{sleepHours}</span><span className="text-[10px] font-black opacity-60">ชั่วโมง</span></div>
                 <div className="flex gap-2 mt-4 relative z-10">
-                   <button onClick={() => setSleepHours(s => Math.max(0, s - 0.5))} className="flex-1 bg-white/10 hover:bg-white/20 text-white py-2 rounded-xl text-xs font-black transition-all">-</button>
-                   <button onClick={() => setSleepHours(s => Math.min(12, s + 0.5))} className="flex-1 bg-white/20 hover:bg-white/30 text-white py-2 rounded-xl text-xs font-black transition-all">+</button>
+                   <button onClick={() => setSleepHours(s => Math.max(0, s - 0.5))} className="flex-1 bg-white/20 hover:bg-white/30 text-white py-2 rounded-xl text-xs font-black">-</button>
+                   <button onClick={() => setSleepHours(s => Math.min(12, s + 0.5))} className="flex-1 bg-white/40 hover:bg-white/50 text-white py-2 rounded-xl text-xs font-black">+</button>
                 </div>
               </div>
 
-              {/* Steps Tracking */}
               <div className="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm col-span-2">
                 <div className="flex justify-between items-center mb-2">
                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">ก้าวเดินวันนี้</p>
                    <Footprints size={16} className="text-orange-500" />
                 </div>
-                <div className="flex items-end gap-1"><span className="text-3xl font-black text-gray-800 tracking-tighter">{steps.toLocaleString()}</span><span className="text-[10px] font-black text-gray-400 uppercase">/ 10k ก้าว</span></div>
+                <div className="flex items-end gap-1"><span className="text-3xl font-black text-gray-800 tracking-tighter">{steps.toLocaleString()}</span><span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">/ 10k ก้าว</span></div>
                 <input type="range" min="0" max="15000" step="500" value={steps} onChange={(e) => setSteps(Number(e.target.value))} className="w-full mt-4 accent-orange-500 h-1.5 bg-gray-100 rounded-full appearance-none cursor-pointer"/>
               </div>
 
-              {/* BMI & Body Stats */}
               <div className="bg-emerald-900 text-white p-7 rounded-[2.5rem] shadow-xl col-span-2 relative overflow-hidden group">
-                 <Scale className="absolute right-[-20px] top-[-20px] opacity-10 group-hover:scale-110 transition-transform duration-700" size={120}/>
-                 <h4 className="text-[10px] font-black uppercase tracking-widest mb-6 opacity-80 flex items-center gap-2"><Scale size={14}/> Body & BMI Status</h4>
+                 <Scale className="absolute right-[-20px] top-[-20px] opacity-10" size={120}/>
+                 <h4 className="text-[10px] font-black uppercase tracking-widest mb-6 opacity-80 flex items-center gap-2 font-bold"><Scale size={14}/> Body & BMI Status</h4>
                  <div className="flex gap-6 relative z-10">
                     <div className="flex-1 space-y-4">
                         <div>
-                            <p className="text-[9px] text-emerald-300 font-black mb-1 uppercase">น้ำหนัก (กก.)</p>
+                            <p className="text-[9px] text-emerald-300 font-black mb-1 uppercase leading-none">น้ำหนัก (กก.)</p>
                             <div className="flex items-center gap-3">
-                                <button onClick={() => setWeight(w => w - 1)} className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center active:bg-white/20 transition-all font-black text-lg">-</button>
+                                <button onClick={() => setWeight(w => w - 1)} className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center font-black active:bg-white/20">-</button>
                                 <span className="font-black text-2xl w-8 text-center tracking-tighter">{weight}</span>
-                                <button onClick={() => setWeight(w => w + 1)} className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center active:bg-white/20 transition-all font-black text-lg">+</button>
+                                <button onClick={() => setWeight(w => w + 1)} className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center font-black active:bg-white/20">+</button>
                             </div>
                         </div>
                         <div>
-                            <p className="text-[9px] text-emerald-300 font-black mb-1 uppercase">ส่วนสูง (ซม.)</p>
+                            <p className="text-[9px] text-emerald-300 font-black mb-1 uppercase leading-none">ส่วนสูง (ซม.)</p>
                             <div className="flex items-center gap-3">
-                                <button onClick={() => setHeight(h => h - 1)} className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center active:bg-white/20 transition-all font-black text-lg">-</button>
+                                <button onClick={() => setHeight(h => h - 1)} className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center font-black active:bg-white/20">-</button>
                                 <span className="font-black text-2xl w-8 text-center tracking-tighter">{height}</span>
-                                <button onClick={() => setHeight(h => h + 1)} className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center active:bg-white/20 transition-all font-black text-lg">+</button>
+                                <button onClick={() => setHeight(h => h + 1)} className="w-8 h-8 bg-white/10 rounded-lg flex items-center justify-center font-black active:bg-white/20">+</button>
                             </div>
                         </div>
                     </div>
                     <div className="flex-1 bg-white rounded-[2.5rem] p-5 text-center flex flex-col items-center justify-center shadow-inner border border-white/20">
-                        <p className="text-[10px] text-gray-400 font-black mb-1 uppercase tracking-widest">BMI INDEX</p>
+                        <p className="text-[10px] text-gray-400 font-black mb-1 uppercase tracking-widest leading-none">BMI</p>
                         <p className={`text-5xl font-black tracking-tighter ${getBMIStatusInfo(parseFloat(calculateBMIValue())).color}`}>{calculateBMIValue()}</p>
-                        <div className={`mt-2 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${getBMIStatusInfo(parseFloat(calculateBMIValue())).bg} ${getBMIStatusInfo(parseFloat(calculateBMIValue())).color}`}>
+                        <div className={`mt-2 px-3 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${getBMIStatusInfo(parseFloat(calculateBMIValue())).bg} ${getBMIStatusInfo(parseFloat(calculateBMIValue())).color}`}>
                             {getBMIStatusInfo(parseFloat(calculateBMIValue())).text}
                         </div>
                     </div>
@@ -461,36 +462,33 @@ const App = () => {
 
       {/* Bottom Nav */}
       <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t flex justify-between items-center h-[85px] rounded-t-[2.5rem] px-6 shadow-[0_-5px_20px_rgba(0,0,0,0.05)] max-w-md mx-auto z-50">
-        <button onClick={() => setActiveTab('work')} className={`flex flex-col items-center flex-1 transition-all ${activeTab === 'work' ? 'text-orange-600 scale-110 font-bold' : 'text-gray-300'}`}><Briefcase size={24}/><span className="text-[9px] mt-1 font-black uppercase tracking-tight">งาน</span></button>
-        <button onClick={() => setActiveTab('memo')} className={`flex flex-col items-center flex-1 transition-all ${activeTab === 'memo' ? 'text-orange-600 scale-110 font-bold' : 'text-gray-300'}`}><StickyNote size={24}/><span className="text-[9px] mt-1 font-black uppercase tracking-tight">โน้ต</span></button>
+        <button onClick={() => setActiveTab('work')} className={`flex flex-col items-center flex-1 transition-all ${activeTab === 'work' ? 'text-orange-600 scale-110 font-bold' : 'text-gray-300'}`}><Briefcase size={24}/><span className="text-[9px] mt-1 font-black uppercase tracking-tight font-bold">งาน</span></button>
+        <button onClick={() => setActiveTab('memo')} className={`flex flex-col items-center flex-1 transition-all ${activeTab === 'memo' ? 'text-orange-600 scale-110 font-bold' : 'text-gray-300'}`}><StickyNote size={24}/><span className="text-[9px] mt-1 font-black uppercase tracking-tight font-bold">โน้ต</span></button>
         <button onClick={() => { setAddType('event'); setShowAddModal(true); }} className="bg-black text-white p-4 rounded-2xl shadow-2xl relative -top-6 hover:scale-110 active:scale-90 transition-all border-4 border-gray-50 shadow-orange-500/20"><Plus size={32}/></button>
-        <button onClick={() => setActiveTab('finance')} className={`flex flex-col items-center flex-1 transition-all ${activeTab === 'finance' ? 'text-orange-600 scale-110 font-bold' : 'text-gray-300'}`}><Wallet size={24}/><span className="text-[9px] mt-1 font-black uppercase tracking-tight">บัญชี</span></button>
-        <button onClick={() => setActiveTab('health')} className={`flex flex-col items-center flex-1 transition-all ${activeTab === 'health' ? 'text-orange-600 scale-110 font-bold' : 'text-gray-300'}`}><Activity size={24}/><span className="text-[9px] mt-1 font-black uppercase tracking-tight">สุขภาพ</span></button>
+        <button onClick={() => setActiveTab('finance')} className={`flex flex-col items-center flex-1 transition-all ${activeTab === 'finance' ? 'text-orange-600 scale-110 font-bold' : 'text-gray-300'}`}><Wallet size={24}/><span className="text-[9px] mt-1 font-black uppercase tracking-tight font-bold">บัญชี</span></button>
+        <button onClick={() => setActiveTab('health')} className={`flex flex-col items-center flex-1 transition-all ${activeTab === 'health' ? 'text-orange-600 scale-110 font-bold' : 'text-gray-300'}`}><Activity size={24}/><span className="text-[9px] mt-1 font-black uppercase tracking-tight font-bold">สุขภาพ</span></button>
       </div>
 
-      {/* Add Modal (Same structure as Fix ตามสั่ง version but keeping logic) */}
+      {/* Add Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/70 z-[100] flex items-end animate-fade-in p-4" onClick={() => setShowAddModal(false)}>
-          <div className="bg-white w-full max-w-md mx-auto p-8 rounded-[3.5rem] animate-slide-up shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+          <div className="bg-white w-full max-w-md mx-auto p-8 rounded-[3.5rem] animate-slide-up shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-8 px-2">
-              <h3 className="font-black text-xl uppercase tracking-tighter">เพิ่มรายการ {
-                addType === 'event' ? 'นัด' : addType === 'task' ? 'งาน' : addType === 'project' ? 'โครงการ' : addType === 'memo' ? 'โน้ต' : 'บัญชี'
-              }</h3>
+              <h3 className="font-black text-xl uppercase tracking-tighter tracking-widest">เพิ่มรายการใหม่</h3>
               <button onClick={() => setShowAddModal(false)} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"><X size={20}/></button>
             </div>
             
             <div className="space-y-6">
-              {/* Menu Categories */}
               <div className="flex bg-gray-100 p-1.5 rounded-2xl overflow-x-auto scrollbar-hide gap-1">
                 {['event', 'task', 'project', 'memo', 'transaction'].map((t: any) => (
-                   <button key={t} onClick={() => setAddType(t)} className={`flex-1 py-4 px-2 text-[14px] font-black rounded-xl transition-all whitespace-nowrap uppercase ${addType === t ? 'bg-orange-500 text-white shadow-lg scale-105' : 'text-gray-400'}`}>
+                   <button key={t} onClick={() => setAddType(t)} className={`flex-1 py-4 px-2 text-[14px] font-black rounded-xl transition-all whitespace-nowrap uppercase ${addType === t ? 'bg-orange-500 text-white shadow-lg scale-105' : 'text-gray-400 hover:text-gray-600'}`}>
                      {t === 'event' ? 'นัด' : t === 'task' ? 'งาน' : t === 'project' ? 'โครงการ' : t === 'memo' ? 'โน้ต' : 'บัญชี'}
                    </button>
                 ))}
               </div>
 
               <div className="space-y-4">
-                <input type="text" placeholder="หัวข้อ / รายการ" value={formData.title || ''} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full p-5 bg-gray-50 rounded-3xl border-none focus:ring-2 focus:ring-orange-200 font-bold text-lg shadow-inner"/>
+                <input type="text" placeholder="หัวข้อเรื่อง / รายการ" value={formData.title || ''} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full p-5 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-orange-200 font-bold text-lg shadow-inner outline-none"/>
                 
                 {addType === 'transaction' && (
                   <div className="flex gap-2">
@@ -500,24 +498,24 @@ const App = () => {
                 )}
 
                 {(addType === 'project' || addType === 'transaction') && (
-                  <input type="number" placeholder="จำนวนเงิน / งบประมาณ (฿)" value={formData.amount || ''} onChange={e => setFormData({...formData, amount: e.target.value})} className="w-full p-5 bg-gray-50 rounded-3xl border-none focus:ring-2 focus:ring-orange-200 font-black text-xl shadow-inner"/>
+                  <input type="number" placeholder="จำนวนเงิน / งบประมาณ (฿)" value={formData.amount || ''} onChange={e => setFormData({...formData, amount: e.target.value})} className="w-full p-5 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-orange-200 font-black text-xl shadow-inner outline-none"/>
                 )}
 
                 {(addType === 'event' || addType === 'task') && (
                   <div className="flex gap-2">
                     <div className="flex-1">
                       <p className="text-[10px] font-black text-gray-400 mb-1 ml-2 uppercase tracking-widest">วันที่</p>
-                      <input type="date" value={formData.date || ''} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-orange-200 font-bold text-sm shadow-inner"/>
+                      <input type="date" value={formData.date || ''} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-orange-200 font-bold text-sm shadow-inner outline-none"/>
                     </div>
                     {addType === 'event' && (
                       <>
                         <div className="w-24">
                           <p className="text-[10px] font-black text-gray-400 mb-1 ml-2 uppercase tracking-widest">เริ่ม</p>
-                          <input type="time" value={formData.startTime || ''} onChange={e => setFormData({...formData, startTime: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-orange-200 font-bold text-sm shadow-inner"/>
+                          <input type="time" value={formData.startTime || ''} onChange={e => setFormData({...formData, startTime: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-orange-200 font-bold text-sm shadow-inner outline-none"/>
                         </div>
                         <div className="w-24">
                           <p className="text-[10px] font-black text-gray-400 mb-1 ml-2 uppercase tracking-widest">สิ้นสุด</p>
-                          <input type="time" value={formData.endTime || ''} onChange={e => setFormData({...formData, endTime: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-orange-200 font-bold text-sm shadow-inner"/>
+                          <input type="time" value={formData.endTime || ''} onChange={e => setFormData({...formData, endTime: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-orange-200 font-bold text-sm shadow-inner outline-none"/>
                         </div>
                       </>
                     )}
@@ -527,21 +525,21 @@ const App = () => {
                 {addType === 'project' && (
                    <div className="flex gap-2">
                       <div className="flex-1">
-                        <p className="text-[10px] font-black text-gray-400 mb-1 ml-2 uppercase tracking-widest">ไตรมาส</p>
+                        <p className="text-[10px] font-black text-gray-400 mb-1 ml-2 uppercase tracking-widest leading-none">ไตรมาส</p>
                         <select value={formData.quarter || '1'} onChange={e => setFormData({...formData, quarter: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-orange-200 font-bold text-sm shadow-inner outline-none">
                           <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
                         </select>
                       </div>
                       <div className="flex-[2]">
-                        <p className="text-[10px] font-black text-gray-400 mb-1 ml-2 uppercase tracking-widest">พื้นที่เป้าหมาย</p>
-                        <input type="text" placeholder="หมู่บ้าน/ตำบล" value={formData.location || ''} onChange={e => setFormData({...formData, location: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-orange-200 font-bold text-sm shadow-inner"/>
+                        <p className="text-[10px] font-black text-gray-400 mb-1 ml-2 uppercase tracking-widest leading-none">พื้นที่เป้าหมาย</p>
+                        <input type="text" placeholder="หมู่บ้าน/ตำบล" value={formData.location || ''} onChange={e => setFormData({...formData, location: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-orange-200 font-bold text-sm shadow-inner outline-none"/>
                       </div>
                    </div>
                 )}
 
                 {addType === 'task' && (
                    <div className="space-y-2">
-                    <p className="text-[10px] font-black text-gray-400 ml-2 uppercase tracking-widest">ระดับความสำคัญ</p>
+                    <p className="text-[10px] font-black text-gray-400 ml-2 uppercase tracking-widest leading-none">ระดับความสำคัญ</p>
                     <div className="flex gap-2">
                       {['ด่วนมาก', 'ด่วน', 'ปกติ'].map(p => (
                         <button key={p} onClick={() => setFormData({...formData, priority: p})} className={`flex-1 py-4 text-[12px] font-black rounded-xl border-2 transition-all ${formData.priority === p ? 'bg-black text-white shadow-lg' : 'border-gray-100 text-gray-400 bg-gray-50'}`}>{p}</button>
@@ -552,7 +550,7 @@ const App = () => {
 
                 {addType === 'memo' && (
                   <>
-                    <textarea placeholder="จดรายละเอียดตรงนี้..." value={formData.content || ''} onChange={e => setFormData({...formData, content: e.target.value})} className="w-full p-5 bg-gray-50 rounded-[2.5rem] h-40 border-none resize-none focus:ring-2 focus:ring-orange-200 font-medium shadow-inner"></textarea>
+                    <textarea placeholder="จดรายละเอียดตรงนี้..." value={formData.content || ''} onChange={e => setFormData({...formData, content: e.target.value})} className="w-full p-5 bg-gray-50 rounded-[2.5rem] h-40 border-none resize-none focus:ring-2 focus:ring-orange-200 font-medium shadow-inner outline-none"></textarea>
                     <div className="space-y-2">
                       <p className="text-[10px] font-black text-gray-400 ml-2 uppercase tracking-widest">เลือกสีโน้ต</p>
                       <div className="flex gap-3 px-2">
@@ -566,7 +564,7 @@ const App = () => {
               </div>
             </div>
 
-            <button onClick={handleSaveItem} className="w-full bg-black text-white py-5 rounded-[2.5rem] font-black shadow-2xl mt-10 active:scale-95 transition-all flex items-center justify-center gap-2 uppercase tracking-widest"><Save size={20}/> บันทึกรายการ</button>
+            <button onClick={handleSaveItem} className="w-full bg-black text-white py-5 rounded-[2.5rem] font-black shadow-2xl mt-10 active:scale-95 transition-all flex items-center justify-center gap-2 uppercase tracking-widest leading-none"><Save size={20}/> บันทึกรายการ</button>
           </div>
         </div>
       )}
@@ -578,7 +576,7 @@ const App = () => {
             <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-orange-400 to-orange-600"></div>
             <div className="bg-orange-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 text-orange-500 shadow-inner"><Laugh size={44} /></div>
             <p className="text-xl italic font-bold text-gray-800 leading-relaxed tracking-tight">"{randomQuote}"</p>
-            <button onClick={() => setShowWelcomeQuote(false)} className="mt-10 bg-black text-white px-10 py-5 rounded-[2rem] font-black w-full shadow-xl hover:scale-105 active:scale-95 transition-all uppercase tracking-widest">ลุยงานกันเลยครับ!</button>
+            <button onClick={() => setShowWelcomeQuote(false)} className="mt-10 bg-black text-white px-10 py-5 rounded-[2rem] font-black w-full shadow-xl hover:scale-105 active:scale-95 transition-all uppercase tracking-widest leading-none">ลุยงานกันเลยครับ!</button>
           </div>
         </div>
       )}
