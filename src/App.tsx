@@ -1,553 +1,1468 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Calendar, CheckSquare, Activity, Smile, Plus, Droplets, Moon, Coffee, Briefcase, Mail, Bell, LogOut, MapPin, Users, FileText, Wallet, TrendingUp, TrendingDown, Heart, X, Clock, Save, Map, Navigation, StickyNote, PenTool, Search, MoreVertical, Target, ChevronRight, Trash2, PieChart, Info, DollarSign, Sparkles, MessageCircle, Send, Footprints, Scale, BarChart2, Phone, User, MessageSquare, Laugh, AlertCircle, BellRing, Zap, CheckCircle2, Circle, ChevronDown, ListTodo
-} from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import {
+  CalendarDays,
+  ClipboardList,
+  FolderKanban,
+  StickyNote,
+  Wallet,
+  HeartPulse,
+  Plus,
+  X,
+  CheckCircle2,
+  Trash2,
+  Bell,
+  MapPin,
+} from "lucide-react";
 
-// --- Configuration ---
-const apiKey = ""; 
-const GOOGLE_SHEET_ID = '1LC1mBr7ZtAFamAf9zpqT20Cp5g8ySTx5XY1n_14HDDU'; 
+/**
+ * P-PROMPT ("พี่พร้อม")
+ * - Single-file App.tsx (works on Vite/Netlify)
+ * - LocalStorage persistence
+ * - Quote popup on every app open
+ * - Greeting (3 questions) on first open of the day
+ * - Calendar: can generate Google Calendar event template link (with location)
+ */
 
-const AppLogo = ({ size = 80, className = "" }: { size?: number, className?: string }) => (
-  <div style={{ width: size, height: size }} className={`bg-gradient-to-br from-orange-400 to-orange-600 rounded-[2.5rem] flex items-center justify-center text-white shadow-xl border-4 border-white/30 relative overflow-hidden ${className}`}>
-    <div className="absolute inset-0 bg-white/10 rotate-45 translate-y-1/2"></div>
-    <Users size={size * 0.55} className="drop-shadow-lg relative z-10" strokeWidth={2.5} />
-    <Heart size={size * 0.18} className="absolute bottom-2.5 right-2.5 text-white/60 fill-current animate-pulse" />
-  </div>
-);
+type TabId = "work" | "memo" | "finance" | "health";
 
-// --- Types ---
-interface Todo { id: number; text: string; priority: 'ด่วนมาก' | 'ด่วน' | 'ปกติ'; completed: boolean; deadline?: string; notified?: boolean; }
-interface ProjectTask { id: number; text: string; completed: boolean; }
-interface Project { id: number; name: string; targetArea?: string; quarter?: string; budget?: number; note?: string; tasks: ProjectTask[]; }
-interface CalendarEvent { id: number; title: string; startTime: string; endTime?: string; date: string; location?: string; notified?: boolean; }
-interface Transaction { id: number; title: string; amount: number; type: 'income' | 'expense'; date: string; }
-interface Memo { id: number; title: string; content: string; color: string; date: string; }
-
-const DEFAULT_QUOTES = ["รอยยิ้มชาวบ้าน คือพลังของพวกเรา", "เป็นพัฒนากร ต้องอดทนสิบล้อชนต้องไม่ตาย", "เพื่อนคู่คิด ไปไหนไปกัน"];
-
-const App = () => {
-  const [activeTab, setActiveTab] = useState<'work' | 'memo' | 'finance' | 'health'>('work');
-  const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem('p_prompt_login') === 'true');
-
-  // --- States ---
-  const [todos, setTodos] = useState<Todo[]>(() => JSON.parse(localStorage.getItem('p_todos') || '[]'));
-  const [projects, setProjects] = useState<Project[]>(() => JSON.parse(localStorage.getItem('p_projects') || '[]'));
-  const [memos, setMemos] = useState<Memo[]>(() => JSON.parse(localStorage.getItem('p_memos') || '[]'));
-  const [transactions, setTransactions] = useState<Transaction[]>(() => JSON.parse(localStorage.getItem('p_trans') || '[]'));
-  const [events, setEvents] = useState<CalendarEvent[]>(() => JSON.parse(localStorage.getItem('p_events') || '[]'));
-  
-  // Health
-  const [waterIntake, setWaterIntake] = useState(() => Number(localStorage.getItem('p_water') || 0));
-  const [steps, setSteps] = useState(() => Number(localStorage.getItem('p_steps') || 0));
-  const [sleepHours, setSleepHours] = useState(() => Number(localStorage.getItem('p_sleep') || 7));
-  const [weight, setWeight] = useState(() => Number(localStorage.getItem('p_weight') || 65));
-  const [height, setHeight] = useState(() => Number(localStorage.getItem('p_height') || 170));
-  
-  // UI States
-  const [mood, setMood] = useState<number | null>(null);
-  const [healthStory, setHealthStory] = useState('');
-  const [aiResponse, setAiResponse] = useState<string | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [showWelcomeQuote, setShowWelcomeQuote] = useState(false);
-  const [randomQuote, setRandomQuote] = useState('');
-  const [notifPermission, setNotifPermission] = useState<string>(typeof Notification !== 'undefined' ? Notification.permission : 'default');
-  const [activeAlerts, setActiveAlerts] = useState<CalendarEvent[]>([]);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [addType, setAddType] = useState<'event' | 'task' | 'project' | 'memo' | 'transaction'>('event');
-  const [formData, setFormData] = useState<any>({ color: 'bg-yellow-100', priority: 'ปกติ', quarter: '1' });
-  const [transactionType, setTransactionType] = useState<'income' | 'expense'>('expense');
-
-  // State สำหรับจัดการงานย่อย (Task Manager Modal)
-  const [selectedProjectForTasks, setSelectedProjectForTasks] = useState<Project | null>(null);
-  const [newTaskInput, setNewTaskInput] = useState("");
-
-  // --- Auto-Save ---
-  useEffect(() => {
-    const data = { p_todos: todos, p_projects: projects, p_memos: memos, p_trans: transactions, p_events: events, p_water: waterIntake, p_steps: steps, p_sleep: sleepHours, p_weight: weight, p_height: height, p_prompt_login: isLoggedIn };
-    Object.entries(data).forEach(([k, v]) => localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v)));
-  }, [todos, projects, memos, transactions, events, waterIntake, steps, sleepHours, weight, height, isLoggedIn]);
-
-  // --- Notification Logic ---
-  const sendNotification = (title: string, body: string) => {
-    if ('serviceWorker' in navigator && Notification.permission === 'granted') {
-      navigator.serviceWorker.ready.then(reg => {
-        reg.showNotification(title, {
-          body,
-          icon: 'https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png',
-          badge: 'https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png',
-          tag: 'p-prompt-alert',
-          renotify: true,
-          vibrate: [200, 100, 200]
-        });
-      });
-    } else if (Notification.permission === 'granted') {
-      new Notification(title, { body });
-    }
-  };
-
-  const handleRequestPermission = async () => {
-    if ("Notification" in window) {
-      const permission = await Notification.requestPermission();
-      setNotifPermission(permission);
-      if (permission === 'granted') sendNotification("พี่พร้อม สแตนด์บาย!", "ระบบแจ้งเตือนเริ่มทำงานแล้วครับพี่");
-    }
-  };
-
-  // --- 15 Mins Heartbeat ---
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const now = new Date();
-      const today = now.toISOString().split('T')[0];
-      const nowMin = now.getHours() * 60 + now.getMinutes();
-
-      const updated = events.map(e => {
-        if (e.date === today && !e.notified) {
-          const [h, m] = e.startTime.split(':').map(Number);
-          const diff = (h * 60 + m) - nowMin;
-          if (diff <= 15 && diff >= 0) {
-            sendNotification(`นัดหมายสำคัญ!`, `${e.title} (เริ่ม ${e.startTime} น.)`);
-            setActiveAlerts(prev => prev.find(a => a.id === e.id) ? prev : [...prev, e]);
-            return { ...e, notified: true };
-          }
-        }
-        return e;
-      });
-      if (JSON.stringify(updated) !== JSON.stringify(events)) setEvents(updated);
-    }, 30000);
-    return () => clearInterval(timer);
-  }, [events]);
-
-  useEffect(() => {
-    if (isLoggedIn) {
-      fetch(`https://opensheet.elk.sh/${GOOGLE_SHEET_ID}/1`)
-        .then(res => res.json())
-        .then(data => {
-          const quotes = data.map((i: any) => i.text || i.quote || Object.values(i)[0]).filter(Boolean);
-          setRandomQuote(quotes[Math.floor(Math.random() * quotes.length)] || DEFAULT_QUOTES[0]);
-          setShowWelcomeQuote(true);
-        }).catch(() => { setRandomQuote(DEFAULT_QUOTES[0]); setShowWelcomeQuote(true); });
-    }
-  }, [isLoggedIn]);
-
-  const calculateBMIValue = () => {
-    const h = height / 100;
-    return h > 0 ? (weight / (h * h)).toFixed(1) : '0';
-  };
-
-  const getBMIStatusInfo = (bmi: number) => {
-    if (bmi < 18.5) return { text: 'ผอมไปนิด', color: 'text-blue-500', bg: 'bg-blue-100' };
-    if (bmi < 23) return { text: 'หุ่นดีมาก', color: 'text-green-500', bg: 'bg-green-100' };
-    if (bmi < 25) return { text: 'เริ่มท้วม', color: 'text-yellow-600', bg: 'bg-yellow-100' };
-    return { text: 'น้ำหนักเกิน', color: 'text-red-600', bg: 'bg-red-100' };
-  };
-
-  const handleSaveItem = () => {
-    const id = Date.now();
-    if (addType === 'task' && formData.title) {
-      setTodos([...todos, { id, text: formData.title, priority: formData.priority, completed: false, deadline: formData.date }]);
-    } else if (addType === 'project' && formData.title) {
-      setProjects([...projects, { id, name: formData.title, targetArea: formData.location, quarter: formData.quarter, budget: Number(formData.amount), note: formData.note, tasks: [] }]);
-    } else if (addType === 'transaction' && formData.amount) {
-      setTransactions([...transactions, { id, title: formData.title || (transactionType === 'income' ? 'รายรับ' : 'รายจ่าย'), amount: Number(formData.amount), type: transactionType, date: new Date().toLocaleDateString('th-TH') }]);
-    } else if (addType === 'memo' && formData.title) {
-      setMemos([...memos, { id, title: formData.title, content: formData.content || '', color: formData.color, date: new Date().toLocaleDateString('th-TH') }]);
-    } else if (addType === 'event' && formData.title) {
-      setEvents([...events, { id, title: formData.title, startTime: formData.startTime || '09:00', endTime: formData.endTime, date: formData.date || new Date().toISOString().split('T')[0], location: formData.location, notified: false }]);
-    }
-    setFormData({ color: 'bg-yellow-100', priority: 'ปกติ', quarter: '1' });
-    setShowAddModal(false);
-  };
-
-  const deleteItem = (type: string, id: number) => {
-    if (type === 'todo') setTodos(todos.filter(t => t.id !== id));
-    if (type === 'project') {
-        setProjects(projects.filter(p => p.id !== id));
-        if (selectedProjectForTasks?.id === id) setSelectedProjectForTasks(null);
-    }
-    if (type === 'trans') setTransactions(transactions.filter(t => t.id !== id));
-    if (type === 'memo') setMemos(memos.filter(m => m.id !== id));
-    if (type === 'event') setEvents(events.filter(e => e.id !== id));
-  };
-
-  // --- ระบบจัดการ Task ในโครงการ (Inside View) ---
-  const addSubTask = () => {
-    if (!selectedProjectForTasks || !newTaskInput) return;
-    const newTask = { id: Date.now(), text: newTaskInput, completed: false };
-    
-    const updatedProjects = projects.map(p => {
-      if (p.id === selectedProjectForTasks.id) {
-        const updatedTasks = [...p.tasks, newTask];
-        const updatedP = { ...p, tasks: updatedTasks };
-        setSelectedProjectForTasks(updatedP); // อัปเดตตัวที่กำลังเปิดอยู่ด้วย
-        return updatedP;
-      }
-      return p;
-    });
-    
-    setProjects(updatedProjects);
-    setNewTaskInput("");
-  };
-
-  const toggleSubTask = (taskId: number) => {
-    if (!selectedProjectForTasks) return;
-    
-    const updatedProjects = projects.map(p => {
-      if (p.id === selectedProjectForTasks.id) {
-        const updatedTasks = p.tasks.map(t => t.id === taskId ? { ...t, completed: !t.completed } : t);
-        const updatedP = { ...p, tasks: updatedTasks };
-        setSelectedProjectForTasks(updatedP);
-        return updatedP;
-      }
-      return p;
-    });
-    
-    setProjects(updatedProjects);
-  };
-
-  const deleteSubTask = (taskId: number) => {
-    if (!selectedProjectForTasks) return;
-    
-    const updatedProjects = projects.map(p => {
-      if (p.id === selectedProjectForTasks.id) {
-        const updatedTasks = p.tasks.filter(t => t.id !== taskId);
-        const updatedP = { ...p, tasks: updatedTasks };
-        setSelectedProjectForTasks(updatedP);
-        return updatedP;
-      }
-      return p;
-    });
-    
-    setProjects(updatedProjects);
-  };
-
-  if (!isLoggedIn) {
-    return (
-      <div className="flex flex-col items-center justify-center h-screen bg-orange-600 text-white p-6 text-center relative overflow-hidden">
-        <div className="absolute top-[-10%] right-[-10%] w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
-        <div className="mb-8 transform hover:scale-110 transition-transform duration-500"><AppLogo size={140} /></div>
-        <h1 className="text-4xl font-black mb-2 tracking-tighter uppercase">พี่พร้อม</h1>
-        <p className="mb-12 opacity-90 font-medium text-lg text-orange-100 italic">"เพื่อนคู่คิด ไปไหนไปกัน"</p>
-        <button onClick={() => setIsLoggedIn(true)} className="bg-black text-white px-12 py-5 rounded-[2.5rem] font-black w-full max-w-xs shadow-2xl active:scale-95 transition-all text-xl uppercase tracking-widest border-b-4 border-gray-800">เริ่มใช้งาน</button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="bg-gray-50 min-h-screen max-w-md mx-auto relative shadow-2xl border-x border-gray-100 font-sans text-gray-900 overflow-hidden">
-      
-      {/* Banner Alerts */}
-      {activeAlerts.length > 0 && (
-        <div className="fixed top-20 left-0 right-0 z-[100] px-4 pointer-events-none">
-          {activeAlerts.map(alert => (
-            <div key={alert.id} className="bg-orange-500 text-white p-4 rounded-2xl shadow-2xl flex items-center justify-between animate-slide-up pointer-events-auto mb-2 border-2 border-white">
-              <div className="flex items-center gap-3">
-                <div className="bg-white/20 p-2 rounded-xl animate-pulse"><Bell size={20}/></div>
-                <div><p className="text-[10px] font-black uppercase opacity-80 mb-1">นัดหมายสำคัญ!</p><p className="text-sm font-bold tracking-tight">{alert.title}</p></div>
-              </div>
-              <button onClick={() => setActiveAlerts(prev => prev.filter(a => a.id !== alert.id))} className="p-2 hover:bg-white/10 rounded-full"><X size={18}/></button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Header */}
-      <div className="bg-white/95 backdrop-blur-md p-4 flex justify-between items-center sticky top-0 z-40 border-b border-gray-100 shadow-sm">
-        <div className="flex items-center gap-3">
-          <AppLogo size={50} className="rounded-2xl shadow-md" />
-          <div className="flex flex-col">
-            <h2 className="text-lg font-black text-gray-900 leading-tight uppercase">พี่พร้อม</h2>
-            <p className="text-[10px] text-orange-600 font-black uppercase tracking-widest leading-none">P'Prompt Surat</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-1">
-            <button onClick={() => sendNotification("พี่พร้อม", "ยังสแตนด์บายช่วยพี่อยู่นะครับ! 😊")} className={`p-2 rounded-full transition-all ${notifPermission === 'granted' ? 'text-orange-500 bg-orange-50' : 'text-gray-300'}`}><BellRing size={22} /></button>
-            <button onClick={() => setIsLoggedIn(false)} className="p-2 text-gray-400 hover:text-red-500 transition-colors ml-1"><LogOut size={22} /></button>
-        </div>
-      </div>
-
-      <div className="h-full overflow-y-auto custom-scrollbar pb-32">
-        {activeTab === 'work' && (
-          <div className="p-4 space-y-6 animate-fade-in">
-            
-            {/* แถบสีน้ำเงิน */}
-            {notifPermission !== 'granted' && (
-               <div className="p-6 bg-indigo-600 text-white rounded-[2.5rem] flex items-start gap-4 shadow-xl relative overflow-hidden animate-slide-up">
-                  <div className="absolute right-[-10px] top-[-10px] opacity-10"><BellRing size={80} /></div>
-                  <AlertCircle className="shrink-0 mt-1" size={24} />
-                  <div className="flex-1 relative z-10">
-                      <p className="text-sm font-black mb-1 uppercase tracking-tight leading-none">เปิดแจ้งเตือนไหมครับ?</p>
-                      <p className="text-[10px] opacity-80 mt-2 mb-4 font-medium leading-relaxed">ผมจะคอยสะกิดเตือนเวลามีนัดล่วงหน้า 15 นาที ไม่ให้พี่พลาดงานสำคัญครับ</p>
-                      <button onClick={handleRequestPermission} className="bg-white text-indigo-600 px-8 py-2.5 rounded-xl text-[10px] font-black uppercase shadow-lg active:scale-95 transition-all">เปิดเลยครับพี่</button>
-                  </div>
-               </div>
-            )}
-
-            {/* นัดหมาย */}
-            <section>
-              <h3 className="font-black text-gray-800 mb-3 flex items-center gap-2 uppercase tracking-tight text-sm"><Calendar size={18} className="text-orange-500"/> นัดหมายวันนี้</h3>
-              <div className="space-y-2">
-                {events.length === 0 ? <p className="text-center text-gray-400 text-sm py-8 italic border-2 border-dashed border-gray-100 rounded-2xl">ไม่มีนัดหมายใหม่</p> : 
-                  events.map(e => (
-                    <div key={e.id} className="bg-white p-4 rounded-2xl border border-gray-100 flex justify-between items-center shadow-sm border-l-4 border-l-orange-500 active:scale-[0.98] transition-all">
-                      <div className="flex-1"><p className="font-bold text-sm text-gray-800 leading-tight">{e.title}</p><p className="text-[10px] text-gray-500 font-black uppercase mt-1 flex items-center gap-1"><Clock size={10}/> {e.startTime} {e.endTime ? `- ${e.endTime}` : ''} | {e.date}</p></div>
-                      <button onClick={() => deleteItem('event', e.id)} className="text-gray-200 hover:text-red-400 p-2"><Trash2 size={16}/></button>
-                    </div>
-                  ))
-                }
-              </div>
-            </section>
-
-            {/* โครงการ (กดเพื่อเข้าไปเพิ่ม Task) */}
-            <section>
-              <h3 className="font-black text-gray-800 mb-3 flex items-center gap-2 uppercase tracking-tight text-sm"><Briefcase size={18} className="text-orange-500"/> โครงการ</h3>
-              <div className="grid grid-cols-1 gap-3">
-                {projects.map(p => {
-                    const completed = p.tasks?.filter(t => t.completed).length || 0;
-                    const total = p.tasks?.length || 0;
-                    const progress = total > 0 ? (completed / total) * 100 : 0;
-
-                    return (
-                      <button 
-                        key={p.id} 
-                        onClick={() => setSelectedProjectForTasks(p)}
-                        className="bg-gray-900 text-white p-5 rounded-[2rem] text-left relative shadow-xl overflow-hidden group active:scale-95 transition-all"
-                      >
-                        <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full -mr-16 -mt-16 blur-2xl group-hover:bg-orange-500/20 transition-all"></div>
-                        <div className="flex justify-between items-start mb-4 relative z-10">
-                            <div>
-                                <span className="text-[9px] bg-orange-600 px-2 py-0.5 rounded-full font-black uppercase tracking-widest mb-1 inline-block">ไตรมาส {p.quarter || '-'}</span>
-                                <h4 className="font-bold text-lg leading-none tracking-tight">{p.name}</h4>
-                                <p className="text-[10px] text-gray-400 flex items-center gap-1 font-bold mt-2 uppercase tracking-widest"><MapPin size={10}/> {p.targetArea || 'ลงพื้นที่'}</p>
-                            </div>
-                            <div className="bg-white/5 p-2 rounded-xl"><ListTodo size={20} className="text-orange-500" /></div>
-                        </div>
-
-                        <div className="relative z-10">
-                            <div className="flex justify-between items-end mb-1.5 px-0.5">
-                                <p className="text-[9px] text-gray-500 font-black uppercase">Progress: {completed}/{total}</p>
-                                <p className="text-[12px] font-black text-orange-500">{Math.round(progress)}%</p>
-                            </div>
-                            <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
-                                <div className="bg-orange-500 h-full transition-all duration-700 shadow-[0_0_8px_rgba(249,115,22,0.6)]" style={{ width: `${progress}%` }}></div>
-                            </div>
-                        </div>
-                        <p className="text-[9px] text-gray-500 mt-4 text-center font-black uppercase tracking-widest opacity-40">คลิกเพื่อจัดการงานย่อย</p>
-                      </button>
-                    );
-                })}
-                <button 
-                    onClick={() => { setAddType('project'); setShowAddModal(true); }} 
-                    className="border-2 border-dashed border-gray-200 rounded-[2.5rem] py-10 flex flex-col items-center justify-center text-gray-400 bg-white hover:border-orange-300 transition-all shadow-sm"
-                >
-                    <Plus size={32}/><span className="text-[10px] font-black mt-1 uppercase tracking-widest">สร้างโครงการใหม่</span>
-                </button>
-              </div>
-            </section>
-
-            {/* งานต้องทำทั่วไป */}
-            <section>
-              <h3 className="font-black text-gray-800 mb-3 flex items-center gap-2 uppercase tracking-tight text-sm"><CheckSquare size={18} className="text-orange-500"/> งานทั่วไป</h3>
-              <div className="space-y-2">
-                {todos.map(t => (
-                  <div key={t.id} className="bg-white p-4 rounded-2xl border border-gray-100 flex items-center gap-4 shadow-sm group">
-                    <input type="checkbox" checked={t.completed} onChange={() => setTodos(todos.map(item => item.id === t.id ? {...item, completed: !item.completed} : item))} className="w-6 h-6 accent-orange-500 rounded-md cursor-pointer"/>
-                    <div className="flex-1"><span className={`text-sm block ${t.completed ? 'line-through text-gray-300' : 'text-gray-800 font-bold'}`}>{t.text}</span><div className="flex gap-2 mt-1"><span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full border ${t.priority === 'ด่วนมาก' ? 'bg-red-50 text-red-600 border-red-100' : t.priority === 'ด่วน' ? 'bg-orange-50 text-orange-600 border-orange-100' : 'bg-green-50 text-green-600 border-green-100'}`}>{t.priority}</span></div></div>
-                    <button onClick={() => deleteItem('todo', t.id)} className="text-gray-200 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16}/></button>
-                  </div>
-                ))}
-              </div>
-            </section>
-          </div>
-        )}
-
-        {/* Tab อื่นๆ ยังคงเดิมตามเวอร์ชัน Master */}
-        {activeTab === 'memo' && (
-          <div className="p-4 grid grid-cols-2 gap-3 animate-fade-in">
-            {memos.map(m => (
-              <div key={m.id} className={`${m.color} p-5 rounded-[2.5rem] relative shadow-sm border border-black/5 min-h-[180px] flex flex-col hover:rotate-2 transition-transform`}>
-                <button onClick={() => deleteItem('memo', m.id)} className="absolute top-3 right-3 text-black/10 hover:text-black/30"><X size={16}/></button>
-                <h4 className="font-bold text-sm mb-2 text-gray-800 leading-tight font-bold">{m.title}</h4>
-                <p className="text-[11px] text-gray-600 line-clamp-6 leading-relaxed font-medium flex-1">{m.content}</p>
-                <p className="text-[8px] font-black text-black/20 mt-2 uppercase tracking-tighter text-right">{m.date}</p>
-              </div>
-            ))}
-            <button onClick={() => { setAddType('memo'); setShowAddModal(true); }} className="border-2 border-dashed border-gray-200 rounded-[2.5rem] p-4 flex flex-col items-center justify-center text-gray-400 bg-white h-[180px] hover:border-orange-200 transition-all shadow-sm"><Plus size={32}/><span className="text-[10px] font-black mt-1 uppercase tracking-widest">โน้ตใหม่</span></button>
-          </div>
-        )}
-
-        {activeTab === 'finance' && (
-          <div className="p-4 space-y-6 animate-fade-in">
-            <div className="bg-gray-900 text-white p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-orange-500/10 rounded-full -mr-16 -mt-16 blur-2xl text-orange-500"></div>
-              <p className="text-[10px] text-gray-400 mb-2 uppercase font-black tracking-widest">Account Balance</p>
-              <h2 className="text-4xl font-black tracking-tighter">฿ {transactions.reduce((acc, curr) => curr.type === 'income' ? acc + curr.amount : acc - curr.amount, 0).toLocaleString()}</h2>
-              <div className="flex gap-3 mt-8 relative z-10">
-                <div className="flex-1 bg-white/5 p-3 rounded-2xl border border-white/10 backdrop-blur-sm text-center"><p className="text-[10px] font-black text-green-400 uppercase mb-1">รายรับรวม</p><p className="text-sm font-black tracking-tight">฿ {transactions.filter(t => t.type === 'income').reduce((a, c) => a + c.amount, 0).toLocaleString()}</p></div>
-                <div className="flex-1 bg-white/5 p-3 rounded-2xl border border-white/10 backdrop-blur-sm text-center"><p className="text-[10px] font-black text-red-400 uppercase mb-1">รายจ่ายรวม</p><p className="text-sm font-black tracking-tight">฿ {transactions.filter(t => t.type === 'expense').reduce((a, c) => a + c.amount, 0).toLocaleString()}</p></div>
-              </div>
-            </div>
-            <div className="space-y-2">
-              {transactions.map(t => (
-                <div key={t.id} className="bg-white p-4 rounded-2xl flex justify-between items-center shadow-sm border border-gray-100">
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2.5 rounded-xl ${t.type === 'income' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}><TrendingUp size={18}/></div>
-                    <div><p className="font-bold text-sm text-gray-800 tracking-tight">{t.title}</p><p className="text-[10px] text-gray-400 font-bold uppercase">{t.date}</p></div>
-                  </div>
-                  <p className={`font-black text-sm ${t.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>{t.type === 'income' ? '+' : '-'}{t.amount.toLocaleString()}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'health' && (
-          <div className="p-4 space-y-6 animate-fade-in pb-32">
-            <section className="bg-white p-8 rounded-[3rem] shadow-sm border border-gray-100 text-center relative overflow-hidden">
-              <Smile size={48} className="mx-auto text-orange-500 mb-6 shadow-inner" />
-              <h3 className="font-black text-gray-800 tracking-tight uppercase">วันนี้รู้สึกอย่างไรบ้าง?</h3>
-              <div className="flex justify-center gap-3 mt-6">
-                {[1,2,3,4,5].map(lv => (
-                  <button key={lv} onClick={() => setMood(lv)} className={`text-4xl p-3 rounded-2xl transition-all ${mood === lv ? 'bg-orange-50 scale-125 shadow-md border-2 border-orange-200' : 'grayscale opacity-30'}`}>
-                    {lv === 1 ? '😫' : lv === 2 ? '😕' : lv === 3 ? '😐' : lv === 4 ? '🙂' : '🤩'}
-                  </button>
-                ))}
-              </div>
-              <textarea value={healthStory} onChange={e => setHealthStory(e.target.value)} placeholder="ระบายความในใจให้พี่พร้อมฟังได้นะ..." className="w-full mt-6 p-5 bg-gray-50 rounded-[2rem] border-none focus:ring-2 focus:ring-orange-200 text-sm h-32 resize-none shadow-inner font-medium"></textarea>
-              <button onClick={handleHealthSubmit} disabled={isAnalyzing} className="w-full mt-4 bg-black text-white py-5 rounded-[2rem] font-black shadow-xl flex items-center justify-center gap-2 active:scale-95 transition-all uppercase tracking-widest leading-none">
-                {isAnalyzing ? <><Sparkles className="animate-spin" size={20}/> พี่พร้อมกำลังฟัง...</> : <><Send size={20}/> ส่งให้พี่พร้อม</>}
-              </button>
-            </section>
-            {aiResponse && (<div className="bg-indigo-600 text-white p-7 rounded-[2.5rem] shadow-2xl animate-slide-up relative overflow-hidden"><div className="absolute top-0 right-0 p-4 opacity-10"><MessageCircle size={100}/></div><h4 className="font-black text-[10px] mb-2 uppercase opacity-80 flex items-center gap-1 tracking-widest font-bold"><Sparkles size={12}/> Message from P'Prompt</h4><p className="text-sm font-bold leading-relaxed">"{aiResponse}"</p></div>)}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-blue-600 text-white p-6 rounded-[2.5rem] shadow-lg relative overflow-hidden"><p className="text-[10px] font-black mb-1 opacity-80 uppercase">ดื่มน้ำ</p><div className="flex items-end gap-1"><span className="text-4xl font-black">{waterIntake}</span><span className="text-[10px] font-black opacity-60">/ 8 แก้ว</span></div><div className="flex gap-2 mt-4 relative z-10"><button onClick={() => setWaterIntake(w => Math.max(0, w - 1))} className="flex-1 bg-white/20 hover:bg-white/30 text-white py-2 rounded-xl text-xs font-black">-</button><button onClick={() => setWaterIntake(w => Math.min(12, w + 1))} className="flex-1 bg-white/40 hover:bg-white/50 text-white py-2 rounded-xl text-xs font-black">+</button></div></div>
-              <div className="bg-stone-900 text-white p-6 rounded-[2.5rem] shadow-lg relative overflow-hidden"><p className="text-[10px] font-black mb-1 opacity-80 uppercase">การนอน</p><div className="flex items-end gap-1"><span className="text-4xl font-black">{sleepHours}</span><span className="text-[10px] font-black opacity-60">ชั่วโมง</span></div><div className="flex gap-2 mt-4 relative z-10"><button onClick={() => setSleepHours(s => Math.max(0, s - 0.5))} className="flex-1 bg-white/20 hover:bg-white/30 text-white py-2 rounded-xl text-xs font-black">-</button><button onClick={() => setSleepHours(s => Math.min(12, s + 0.5))} className="flex-1 bg-white/40 hover:bg-white/50 text-white py-2 rounded-xl text-xs font-black">+</button></div></div>
-              <div className="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm col-span-2 text-center"><p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">ก้าวเดินวันนี้</p><span className="text-3xl font-black text-gray-800 tracking-tighter">{steps.toLocaleString()}</span><input type="range" min="0" max="15000" step="500" value={steps} onChange={(e) => setSteps(Number(e.target.value))} className="w-full mt-4 accent-orange-500 h-1.5 bg-gray-100 rounded-full appearance-none"/></div>
-              <div className="bg-emerald-900 text-white p-7 rounded-[2.5rem] shadow-xl col-span-2 relative overflow-hidden group text-center">
-                 <Scale className="absolute right-[-20px] top-[-20px] opacity-10" size={120}/>
-                 <p className="text-[10px] text-emerald-300 font-black mb-1 uppercase tracking-widest leading-none">BMI INDEX</p>
-                 <p className={`text-5xl font-black tracking-tighter`}>{calculateBMIValue()}</p>
-                 <div className={`mt-2 inline-block px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${getBMIStatusInfo(parseFloat(calculateBMIValue())).bg} ${getBMIStatusInfo(parseFloat(calculateBMIValue())).color}`}>{getBMIStatusInfo(parseFloat(calculateBMIValue())).text}</div>
-                 <div className="flex gap-4 mt-8 relative z-10 justify-center"><div className="flex flex-col items-center"><p className="text-[9px] text-emerald-300 font-black uppercase mb-1">น้ำหนัก</p><div className="flex items-center gap-2"><button onClick={() => setWeight(w => w - 1)} className="w-8 h-8 bg-white/10 rounded-lg font-black">-</button><span className="font-black text-lg w-8 text-center">{weight}</span><button onClick={() => setWeight(w => w + 1)} className="w-8 h-8 bg-white/10 rounded-lg font-black">+</button></div></div><div className="flex flex-col items-center"><p className="text-[9px] text-emerald-300 font-black uppercase mb-1">ส่วนสูง</p><div className="flex items-center gap-2"><button onClick={() => setHeight(h => h - 1)} className="w-8 h-8 bg-white/10 rounded-lg font-black">-</button><span className="font-black text-lg w-8 text-center">{height}</span><button onClick={() => setHeight(h => h + 1)} className="w-8 h-8 bg-white/10 rounded-lg font-black">+</button></div></div></div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* --- Task Manager Modal (Inside View) --- */}
-      {selectedProjectForTasks && (
-        <div className="fixed inset-0 bg-black/80 z-[200] flex items-end animate-fade-in" onClick={() => setSelectedProjectForTasks(null)}>
-            <div className="bg-white w-full max-w-md mx-auto p-8 rounded-t-[3.5rem] animate-slide-up shadow-2xl max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
-                <div className="flex justify-between items-start mb-6">
-                    <div>
-                        <h3 className="font-black text-2xl uppercase tracking-tighter text-gray-900 leading-none">{selectedProjectForTasks.name}</h3>
-                        <p className="text-[10px] font-black text-orange-600 uppercase tracking-widest mt-2 flex items-center gap-1"><Target size={12}/> จัดการงานย่อยในโครงการ</p>
-                    </div>
-                    <button onClick={() => setSelectedProjectForTasks(null)} className="p-3 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"><X size={20}/></button>
-                </div>
-
-                {/* Input สำหรับเพิ่ม Task ใหม่ */}
-                <div className="flex gap-2 mb-6">
-                    <input 
-                        type="text" 
-                        placeholder="พิมพ์ชื่อกิจกรรม/งานย่อย..." 
-                        value={newTaskInput}
-                        onChange={(e) => setNewTaskInput(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && addSubTask()}
-                        className="flex-1 p-5 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-orange-200 font-bold text-sm shadow-inner outline-none"
-                    />
-                    <button 
-                        onClick={addSubTask}
-                        className="bg-black text-white p-5 rounded-2xl active:scale-95 transition-all shadow-xl"
-                    >
-                        <Plus size={24} />
-                    </button>
-                </div>
-
-                {/* รายการ Task ทั้งหมด */}
-                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 pb-10">
-                    {selectedProjectForTasks.tasks.length === 0 ? (
-                        <div className="text-center py-10 opacity-30 italic">
-                            <ListTodo size={48} className="mx-auto mb-2" />
-                            <p className="text-sm">ยังไม่มีงานย่อย เพิ่มได้เลยด้านบนครับพี่</p>
-                        </div>
-                    ) : (
-                        selectedProjectForTasks.tasks.map(task => (
-                            <div key={task.id} className="flex items-center gap-4 bg-gray-50 p-4 rounded-3xl border border-gray-100 group">
-                                <button 
-                                    onClick={() => toggleSubTask(task.id)}
-                                    className={`transition-all ${task.completed ? 'text-green-500 scale-110' : 'text-gray-300'}`}
-                                >
-                                    {task.completed ? <CheckCircle2 size={28} /> : <Circle size={28} />}
-                                </button>
-                                <span className={`flex-1 text-sm font-bold ${task.completed ? 'line-through text-gray-400 italic font-medium' : 'text-gray-800'}`}>
-                                    {task.text}
-                                </span>
-                                <button 
-                                    onClick={() => deleteSubTask(task.id)}
-                                    className="text-gray-200 hover:text-red-500 p-1"
-                                >
-                                    <Trash2 size={18} />
-                                </button>
-                            </div>
-                        ))
-                    )}
-                </div>
-                
-                <button 
-                    onClick={() => setSelectedProjectForTasks(null)}
-                    className="w-full bg-orange-600 text-white py-5 rounded-[2rem] font-black shadow-2xl active:scale-95 transition-all uppercase tracking-widest"
-                >
-                    ปิดหน้าต่างนี้
-                </button>
-            </div>
-        </div>
-      )}
-
-      {/* Bottom Nav */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t flex justify-between items-center h-[85px] rounded-t-[2.5rem] px-6 shadow-[0_-5px_20px_rgba(0,0,0,0.05)] max-w-md mx-auto z-50">
-        <button onClick={() => setActiveTab('work')} className={`flex flex-col items-center flex-1 transition-all ${activeTab === 'work' ? 'text-orange-600 scale-110 font-bold' : 'text-gray-300'}`}><Briefcase size={24}/><span className="text-[9px] mt-1 font-black uppercase tracking-tight font-bold">งาน</span></button>
-        <button onClick={() => setActiveTab('memo')} className={`flex flex-col items-center flex-1 transition-all ${activeTab === 'memo' ? 'text-orange-600 scale-110 font-bold' : 'text-gray-300'}`}><StickyNote size={24}/><span className="text-[9px] mt-1 font-black uppercase tracking-tight font-bold">โน้ต</span></button>
-        <button onClick={() => { setAddType('event'); setShowAddModal(true); }} className="bg-black text-white p-4 rounded-2xl shadow-2xl relative -top-6 hover:scale-110 active:scale-90 transition-all border-4 border-gray-50 shadow-orange-500/20"><Plus size={32}/></button>
-        <button onClick={() => setActiveTab('finance')} className={`flex flex-col items-center flex-1 transition-all ${activeTab === 'finance' ? 'text-orange-600 scale-110 font-bold' : 'text-gray-300'}`}><Wallet size={24}/><span className="text-[9px] mt-1 font-black uppercase tracking-tight font-bold">บัญชี</span></button>
-        <button onClick={() => setActiveTab('health')} className={`flex flex-col items-center flex-1 transition-all ${activeTab === 'health' ? 'text-orange-600 scale-110 font-bold' : 'text-gray-300'}`}><Activity size={24}/><span className="text-[9px] mt-1 font-black uppercase tracking-tight font-bold">สุขภาพ</span></button>
-      </div>
-
-      {/* Add Item Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-black/70 z-[100] flex items-end animate-fade-in p-4" onClick={() => setShowAddModal(false)}>
-          <div className="bg-white w-full max-w-md mx-auto p-8 rounded-[3.5rem] animate-slide-up shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-8 px-2"><h3 className="font-black text-xl uppercase tracking-tighter uppercase">เพิ่มรายการใหม่</h3><button onClick={() => setShowAddModal(false)} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"><X size={20}/></button></div>
-            <div className="space-y-6">
-              <div className="flex bg-gray-100 p-1.5 rounded-2xl overflow-x-auto scrollbar-hide gap-1">{['event', 'task', 'project', 'memo', 'transaction'].map((t: any) => (<button key={t} onClick={() => setAddType(t)} className={`flex-1 py-4 px-2 text-[14px] font-black rounded-xl transition-all whitespace-nowrap uppercase ${addType === t ? 'bg-orange-500 text-white shadow-lg scale-105' : 'text-gray-400 hover:text-gray-600'}`}>{t === 'event' ? 'นัด' : t === 'task' ? 'งาน' : t === 'project' ? 'โครงการ' : t === 'memo' ? 'โน้ต' : 'บัญชี'}</button>))}</div>
-              <div className="space-y-4">
-                <input type="text" placeholder="หัวข้อเรื่อง / รายการ" value={formData.title || ''} onChange={e => setFormData({...formData, title: e.target.value})} className="w-full p-5 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-orange-200 font-bold text-lg shadow-inner outline-none"/>
-                {addType === 'transaction' && (<div className="flex gap-2"><button onClick={() => setTransactionType('income')} className={`flex-1 py-4 rounded-2xl border-2 font-black transition-all ${transactionType === 'income' ? 'bg-orange-500 border-orange-500 text-white shadow-lg' : 'border-gray-100 text-gray-400'}`}>รายรับ</button><button onClick={() => setTransactionType('expense')} className={`flex-1 py-4 rounded-2xl border-2 font-black transition-all ${transactionType === 'expense' ? 'bg-orange-600 border-orange-600 text-white shadow-lg' : 'border-gray-100 text-gray-400'}`}>รายจ่าย</button></div>)}
-                {(addType === 'project' || addType === 'transaction') && (<input type="number" placeholder="จำนวนเงิน / งบประมาณ (฿)" value={formData.amount || ''} onChange={e => setFormData({...formData, amount: e.target.value})} className="w-full p-5 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-orange-200 font-black text-xl shadow-inner outline-none"/>)}
-                {(addType === 'event' || addType === 'task') && (<div className="flex gap-2"><div className="flex-1"><p className="text-[10px] font-black text-gray-400 mb-1 ml-2 uppercase tracking-widest">วันที่</p><input type="date" value={formData.date || ''} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-orange-200 font-bold text-sm shadow-inner outline-none"/></div>{addType === 'event' && (<><div className="w-24"><p className="text-[10px] font-black text-gray-400 mb-1 ml-2 uppercase tracking-widest">เริ่ม</p><input type="time" value={formData.startTime || ''} onChange={e => setFormData({...formData, startTime: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-orange-200 font-bold text-sm shadow-inner outline-none"/></div><div className="w-24"><p className="text-[10px] font-black text-gray-400 mb-1 ml-2 uppercase tracking-widest">สิ้นสุด</p><input type="time" value={formData.endTime || ''} onChange={e => setFormData({...formData, endTime: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-orange-200 font-bold text-sm shadow-inner outline-none"/></div></>)}</div>)}
-                {addType === 'project' && (<div className="flex gap-2"><div className="flex-1"><p className="text-[10px] font-black text-gray-400 mb-1 ml-2 uppercase tracking-widest leading-none">ไตรมาส</p><select value={formData.quarter || '1'} onChange={e => setFormData({...formData, quarter: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-orange-200 font-bold text-sm shadow-inner outline-none"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></div><div className="flex-[2]"><p className="text-[10px] font-black text-gray-400 mb-1 ml-2 uppercase tracking-widest leading-none">พื้นที่เป้าหมาย</p><input type="text" placeholder="หมู่บ้าน/ตำบล" value={formData.location || ''} onChange={e => setFormData({...formData, location: e.target.value})} className="w-full p-4 bg-gray-50 rounded-2xl border-none focus:ring-2 focus:ring-orange-200 font-bold text-sm shadow-inner outline-none"/></div></div>)}
-                {addType === 'task' && (<div className="space-y-2"><p className="text-[10px] font-black text-gray-400 ml-2 uppercase tracking-widest leading-none">ระดับความสำคัญ</p><div className="flex gap-2">{['ด่วนมาก', 'ด่วน', 'ปกติ'].map(p => (<button key={p} onClick={() => setFormData({...formData, priority: p})} className={`flex-1 py-4 text-[12px] font-black rounded-xl border-2 transition-all ${formData.priority === p ? 'bg-black text-white shadow-lg' : 'border-gray-100 text-gray-400 bg-gray-50'}`}>{p}</button>))}</div></div>)}
-                {addType === 'memo' && (<><textarea placeholder="จดรายละเอียดตรงนี้..." value={formData.content || ''} onChange={e => setFormData({...formData, content: e.target.value})} className="w-full p-5 bg-gray-50 rounded-[2.5rem] h-40 border-none resize-none focus:ring-2 focus:ring-orange-200 font-medium shadow-inner outline-none"></textarea><div className="space-y-2"><p className="text-[10px] font-black text-gray-400 ml-2 uppercase tracking-widest">เลือกสีโน้ต</p><div className="flex gap-3 px-2">{['bg-yellow-100', 'bg-blue-100', 'bg-pink-100', 'bg-green-100', 'bg-purple-100'].map(c => ( <button key={c} onClick={() => setFormData({...formData, color: c})} className={`w-10 h-10 rounded-full ${c} border border-gray-200 shadow-sm ring-2 ${formData.color === c ? 'ring-orange-500 scale-110 shadow-md' : 'ring-transparent opacity-60'} active:scale-90 transition-all`}></button> ))}</div></div></>)}
-              </div>
-            </div>
-            <button onClick={handleSaveItem} className="w-full bg-black text-white py-5 rounded-[2.5rem] font-black shadow-2xl mt-10 active:scale-95 transition-all flex items-center justify-center gap-2 uppercase tracking-widest leading-none"><Save size={20}/> บันทึกรายการ</button>
-          </div>
-        </div>
-      )}
-
-      {/* Welcome Quote Popup */}
-      {showWelcomeQuote && (
-        <div className="fixed inset-0 bg-black/80 z-[300] flex items-center justify-center p-8 animate-fade-in" onClick={() => setShowWelcomeQuote(false)}>
-          <div className="bg-white p-10 rounded-[3.5rem] text-center shadow-2xl relative overflow-hidden max-w-sm w-full animate-scale-in" onClick={e => e.stopPropagation()}>
-            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-orange-400 to-orange-600"></div>
-            <div className="bg-orange-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 text-orange-500 shadow-inner"><Laugh size={44} /></div>
-            <p className="text-xl italic font-bold text-gray-800 leading-relaxed tracking-tight">"{randomQuote}"</p>
-            <button onClick={() => setShowWelcomeQuote(false)} className="mt-10 bg-black text-white px-10 py-5 rounded-[2rem] font-black w-full shadow-xl hover:scale-105 active:scale-95 transition-all uppercase leading-none">ลุยงานกันเลยครับ!</button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+type Appointment = {
+  id: string;
+  title: string;
+  date: string; // YYYY-MM-DD
+  startTime: string; // HH:mm
+  endTime: string; // HH:mm
+  location: string;
+  note: string;
+  createdAt: number;
 };
 
-export default App;
+type Task = {
+  id: string;
+  title: string;
+  dueDate: string; // YYYY-MM-DD
+  priority: "ต่ำ" | "กลาง" | "สูง";
+  done: boolean;
+  createdAt: number;
+};
+
+type Project = {
+  id: string;
+  name: string;
+  budget: number;
+  quarters: ("Q1" | "Q2" | "Q3" | "Q4")[];
+  target: string;
+  tasks: { id: string; title: string; done: boolean }[];
+  createdAt: number;
+};
+
+type NoteItem = {
+  id: string;
+  title: string;
+  content: string;
+  color: string; // tailwind bg class
+  createdAt: number;
+};
+
+type FinanceItem = {
+  id: string;
+  date: string; // YYYY-MM-DD
+  title: string;
+  type: "รายรับ" | "รายจ่าย";
+  amount: number;
+  category: string;
+  necessity: "จำเป็น" | "ฟุ่มเฟือย";
+  note: string;
+  createdAt: number;
+};
+
+type HealthEntry = {
+  id: string;
+  date: string; // YYYY-MM-DD
+  steps: number;
+  waterGlasses: number;
+  teaCoffeeGlasses: number;
+  sleepHours: number;
+  moodLevel: 1 | 2 | 3 | 4 | 5; // 1 sad -> 5 happy
+  detail: string;
+  createdAt: number;
+};
+
+const APP_ID = "p-prompt-surat";
+
+// ----------------- helpers -----------------
+function uid(prefix = "id") {
+  return `${prefix}_${Math.random().toString(16).slice(2)}_${Date.now()}`;
+}
+
+function todayYMD() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+
+function safeJsonParse<T>(raw: string | null, fallback: T): T {
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function toGCalDateTime(dateYMD: string, timeHM: string) {
+  // Google Calendar template wants: YYYYMMDDTHHMMSSZ OR local without Z
+  // We'll send local time without timezone Z to keep it simple.
+  const [y, m, d] = dateYMD.split("-");
+  const [hh, mm] = timeHM.split(":");
+  return `${y}${m}${d}T${hh}${mm}00`;
+}
+
+function buildGCalTemplateUrl(args: {
+  title: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  details?: string;
+  location?: string;
+}) {
+  const dates = `${toGCalDateTime(args.date, args.startTime)}/${toGCalDateTime(
+    args.date,
+    args.endTime
+  )}`;
+  const url = new URL("https://calendar.google.com/calendar/render");
+  url.searchParams.set("action", "TEMPLATE");
+  url.searchParams.set("text", args.title || "นัดหมาย");
+  url.searchParams.set("dates", dates);
+  if (args.details) url.searchParams.set("details", args.details);
+  if (args.location) url.searchParams.set("location", args.location);
+  return url.toString();
+}
+
+function clampNumber(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
+// ----------------- UI atoms -----------------
+function Modal(props: {
+  open: boolean;
+  title?: string;
+  onClose: () => void;
+  children: React.ReactNode;
+  wide?: boolean;
+}) {
+  const { open, title, onClose, children, wide } = props;
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50">
+      <div
+        className="absolute inset-0 bg-black/50"
+        onClick={onClose}
+        aria-hidden
+      />
+      <div className="absolute inset-0 flex items-end sm:items-center justify-center p-3">
+        <div
+          className={[
+            "w-full rounded-3xl bg-white shadow-xl",
+            wide ? "max-w-3xl" : "max-w-xl",
+          ].join(" ")}
+        >
+          <div className="flex items-center justify-between px-5 py-4 border-b">
+            <div className="font-semibold text-gray-900">{title ?? ""}</div>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-full hover:bg-gray-100"
+              aria-label="close"
+            >
+              <X size={18} />
+            </button>
+          </div>
+          <div className="p-5">{children}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Pill(props: { active?: boolean; children: React.ReactNode; onClick?: () => void }) {
+  return (
+    <button
+      onClick={props.onClick}
+      className={[
+        "px-4 py-2 rounded-full text-sm transition border",
+        props.active
+          ? "bg-orange-500 text-white border-orange-500"
+          : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50",
+      ].join(" ")}
+    >
+      {props.children}
+    </button>
+  );
+}
+
+function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      {...props}
+      className={[
+        "w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900",
+        "placeholder:text-gray-300 placeholder:font-light",
+        "focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-orange-300",
+        props.className ?? "",
+      ].join(" ")}
+    />
+  );
+}
+
+function Textarea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return (
+    <textarea
+      {...props}
+      className={[
+        "w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900",
+        "placeholder:text-gray-300 placeholder:font-light",
+        "focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-orange-300",
+        props.className ?? "",
+      ].join(" ")}
+    />
+  );
+}
+
+function SectionTitle(props: { icon: React.ReactNode; title: string; right?: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between mt-3 mb-3">
+      <div className="flex items-center gap-2 text-gray-900">
+        <div className="text-orange-500">{props.icon}</div>
+        <div className="font-semibold">{props.title}</div>
+      </div>
+      {props.right}
+    </div>
+  );
+}
+
+function StatCard(props: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+      <div className="text-xs text-gray-500">{props.label}</div>
+      <div className="mt-1 text-lg font-semibold text-gray-900">{props.value}</div>
+      {props.sub ? <div className="mt-1 text-xs text-gray-500">{props.sub}</div> : null}
+    </div>
+  );
+}
+
+function ProgressBar(props: { value: number }) {
+  const v = clampNumber(props.value, 0, 100);
+  return (
+    <div className="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
+      <div className="h-full bg-orange-500" style={{ width: `${v}%` }} />
+    </div>
+  );
+}
+
+function SmileyScale(props: {
+  value: 1 | 2 | 3 | 4 | 5;
+  onChange: (v: 1 | 2 | 3 | 4 | 5) => void;
+}) {
+  const faces = ["😡", "😟", "😐", "🙂", "😄"] as const;
+  return (
+    <div className="rounded-2xl border border-gray-100 bg-white p-4">
+      <div className="flex items-center justify-between text-xl">
+        {faces.map((f, idx) => {
+          const level = (idx + 1) as 1 | 2 | 3 | 4 | 5;
+          const active = props.value === level;
+          return (
+            <button
+              key={level}
+              onClick={() => props.onChange(level)}
+              className={[
+                "w-12 h-12 rounded-full grid place-items-center transition",
+                active ? "bg-orange-50 ring-2 ring-orange-300" : "hover:bg-gray-50",
+              ].join(" ")}
+              aria-label={`mood-${level}`}
+              type="button"
+            >
+              <span className={active ? "" : "opacity-60"}>{f}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* gradient bar + slider */}
+      <div className="mt-4">
+        <div
+          className="h-2 rounded-full"
+          style={{
+            background:
+              "linear-gradient(90deg, #ef4444 0%, #f97316 25%, #facc15 50%, #84cc16 75%, #22c55e 100%)",
+          }}
+        />
+        <input
+          type="range"
+          min={1}
+          max={5}
+          step={1}
+          value={props.value}
+          onChange={(e) => props.onChange(Number(e.target.value) as 1 | 2 | 3 | 4 | 5)}
+          className="mt-3 w-full"
+        />
+        <div className="mt-1 text-xs text-gray-500">
+          ระดับอารมณ์วันนี้: <span className="font-semibold text-gray-900">{props.value}/5</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ----------------- main -----------------
+export default function App() {
+  // quotes (เดิม ๆ แนวขำๆ ให้กำลังใจ)
+  const quotes = useMemo(
+    () => [
+      "ไม่ได้ขี้เกียจ… แค่อยู่ในโหมดประหยัดพลังงาน 😌",
+      "วันนี้ยังไม่ปังไม่เป็นไร ขอแค่ไม่พังพอ 🧯",
+      "ถ้าเหนื่อยก็พัก… พักเสร็จค่อยไปต่อ (อย่าพักยาวเป็นซีซันนะ) 😅",
+      "หัวใจไม่ว่าง เพราะกำลังโหลดไฟล์กำลังใจอยู่ 💾",
+      "ชีวิตไม่ต้องเพอร์เฟ็กต์ แค่ค่อยๆดีขึ้นก็ชนะแล้ว ✨",
+      "อย่าดุตัวเองเก่งกว่างานที่ทำได้ 🫶",
+      "พี่พร้อมอยู่ตรงนี้… แต่ขอให้เราเริ่มทีละนิดก็พอ 🙂",
+    ],
+    []
+  );
+
+  const [activeTab, setActiveTab] = useState<TabId>("work");
+
+  // quote popup
+  const [quoteOpen, setQuoteOpen] = useState(true);
+  const quoteText = useMemo(() => quotes[Math.floor(Math.random() * quotes.length)], [quotes]);
+
+  // greeting (3 questions) once/day
+  const [greetOpen, setGreetOpen] = useState(false);
+  const [greetA, setGreetA] = useState("");
+  const [greetB, setGreetB] = useState("");
+  const [greetC, setGreetC] = useState("");
+
+  // data
+  const [appointments, setAppointments] = useState<Appointment[]>(
+    () => safeJsonParse(localStorage.getItem(`${APP_ID}:appointments`), [])
+  );
+  const [tasks, setTasks] = useState<Task[]>(
+    () => safeJsonParse(localStorage.getItem(`${APP_ID}:tasks`), [])
+  );
+  const [projects, setProjects] = useState<Project[]>(
+    () => safeJsonParse(localStorage.getItem(`${APP_ID}:projects`), [])
+  );
+  const [notes, setNotes] = useState<NoteItem[]>(
+    () => safeJsonParse(localStorage.getItem(`${APP_ID}:notes`), [])
+  );
+  const [finance, setFinance] = useState<FinanceItem[]>(
+    () => safeJsonParse(localStorage.getItem(`${APP_ID}:finance`), [])
+  );
+  const [health, setHealth] = useState<HealthEntry[]>(
+    () => safeJsonParse(localStorage.getItem(`${APP_ID}:health`), [])
+  );
+
+  // add modal
+  const [addOpen, setAddOpen] = useState(false);
+  type AddMode = "นัด" | "งาน" | "โครงการ" | "โน้ต" | "บัญชี" | "สุขภาพ";
+  const [addMode, setAddMode] = useState<AddMode>("นัด");
+
+  // appointment form
+  const [apptTitle, setApptTitle] = useState("");
+  const [apptDate, setApptDate] = useState(todayYMD());
+  const [apptStart, setApptStart] = useState("09:00");
+  const [apptEnd, setApptEnd] = useState("10:00");
+  const [apptLocation, setApptLocation] = useState("");
+  const [apptNote, setApptNote] = useState("");
+  const [apptAddToGCal, setApptAddToGCal] = useState(true);
+
+  // task form
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDue, setTaskDue] = useState(todayYMD());
+  const [taskPriority, setTaskPriority] = useState<Task["priority"]>("กลาง");
+
+  // project form
+  const [projName, setProjName] = useState("");
+  const [projBudget, setProjBudget] = useState<number>(0);
+  const [projTarget, setProjTarget] = useState("");
+  const [projQuarters, setProjQuarters] = useState<Project["quarters"]>(["Q1"]);
+  const [projTaskDraft, setProjTaskDraft] = useState("");
+  const [projTasksDraft, setProjTasksDraft] = useState<Project["tasks"]>([]);
+
+  // note form
+  const pastelColors = useMemo(
+    () => [
+      { name: "Peach", cls: "bg-orange-100" },
+      { name: "Lavender", cls: "bg-violet-100" },
+      { name: "Mint", cls: "bg-emerald-100" },
+      { name: "Sky", cls: "bg-sky-100" },
+      { name: "Butter", cls: "bg-yellow-100" },
+    ],
+    []
+  );
+  const [noteTitle, setNoteTitle] = useState("");
+  const [noteContent, setNoteContent] = useState("");
+  const [noteColor, setNoteColor] = useState(pastelColors[0].cls);
+
+  // finance form
+  const [finDate, setFinDate] = useState(todayYMD());
+  const [finTitle, setFinTitle] = useState("");
+  const [finType, setFinType] = useState<FinanceItem["type"]>("รายจ่าย");
+  const [finAmount, setFinAmount] = useState<number>(0);
+  const [finCategory, setFinCategory] = useState("");
+  const [finNecessity, setFinNecessity] = useState<FinanceItem["necessity"]>("จำเป็น");
+  const [finNote, setFinNote] = useState("");
+
+  // health form
+  const [hDate, setHDate] = useState(todayYMD());
+  const [hSteps, setHSteps] = useState<number>(0);
+  const [hWater, setHWater] = useState<number>(0);
+  const [hTea, setHTea] = useState<number>(0);
+  const [hSleep, setHSleep] = useState<number>(0);
+  const [hMood, setHMood] = useState<1 | 2 | 3 | 4 | 5>(4);
+  const [hDetail, setHDetail] = useState("");
+
+  // persist
+  useEffect(() => {
+    localStorage.setItem(`${APP_ID}:appointments`, JSON.stringify(appointments));
+  }, [appointments]);
+  useEffect(() => {
+    localStorage.setItem(`${APP_ID}:tasks`, JSON.stringify(tasks));
+  }, [tasks]);
+  useEffect(() => {
+    localStorage.setItem(`${APP_ID}:projects`, JSON.stringify(projects));
+  }, [projects]);
+  useEffect(() => {
+    localStorage.setItem(`${APP_ID}:notes`, JSON.stringify(notes));
+  }, [notes]);
+  useEffect(() => {
+    localStorage.setItem(`${APP_ID}:finance`, JSON.stringify(finance));
+  }, [finance]);
+  useEffect(() => {
+    localStorage.setItem(`${APP_ID}:health`, JSON.stringify(health));
+  }, [health]);
+
+  // greeting once/day
+  useEffect(() => {
+    const k = `${APP_ID}:greet_seen:${todayYMD()}`;
+    if (!localStorage.getItem(k)) {
+      setGreetOpen(true);
+      localStorage.setItem(k, "1");
+    }
+  }, []);
+
+  // helpers
+  const todaysAppointments = useMemo(() => {
+    const t = todayYMD();
+    return appointments
+      .filter((a) => a.date === t)
+      .sort((a, b) => a.startTime.localeCompare(b.startTime));
+  }, [appointments]);
+
+  const openAdd = (mode?: AddMode) => {
+    if (mode) setAddMode(mode);
+    setAddOpen(true);
+  };
+
+  const resetForms = () => {
+    setApptTitle("");
+    setApptDate(todayYMD());
+    setApptStart("09:00");
+    setApptEnd("10:00");
+    setApptLocation("");
+    setApptNote("");
+    setApptAddToGCal(true);
+
+    setTaskTitle("");
+    setTaskDue(todayYMD());
+    setTaskPriority("กลาง");
+
+    setProjName("");
+    setProjBudget(0);
+    setProjTarget("");
+    setProjQuarters(["Q1"]);
+    setProjTaskDraft("");
+    setProjTasksDraft([]);
+
+    setNoteTitle("");
+    setNoteContent("");
+    setNoteColor(pastelColors[0].cls);
+
+    setFinDate(todayYMD());
+    setFinTitle("");
+    setFinType("รายจ่าย");
+    setFinAmount(0);
+    setFinCategory("");
+    setFinNecessity("จำเป็น");
+    setFinNote("");
+
+    setHDate(todayYMD());
+    setHSteps(0);
+    setHWater(0);
+    setHTea(0);
+    setHSleep(0);
+    setHMood(4);
+    setHDetail("");
+  };
+
+  const handleSave = () => {
+    if (addMode === "นัด") {
+      if (!apptTitle.trim()) return alert("กรุณากรอกหัวข้อ/รายการนัด");
+      if (!apptDate) return alert("กรุณาเลือกวันที่");
+      const item: Appointment = {
+        id: uid("appt"),
+        title: apptTitle.trim(),
+        date: apptDate,
+        startTime: apptStart || "09:00",
+        endTime: apptEnd || "10:00",
+        location: apptLocation.trim(),
+        note: apptNote.trim(),
+        createdAt: Date.now(),
+      };
+      setAppointments((prev) => [item, ...prev]);
+
+      // optional: add to google calendar template
+      if (apptAddToGCal) {
+        const url = buildGCalTemplateUrl({
+          title: item.title,
+          date: item.date,
+          startTime: item.startTime,
+          endTime: item.endTime,
+          details: item.note || "สร้างจากพี่พร้อม",
+          location: item.location,
+        });
+        window.open(url, "_blank", "noopener,noreferrer");
+      }
+
+      setAddOpen(false);
+      resetForms();
+      return;
+    }
+
+    if (addMode === "งาน") {
+      if (!taskTitle.trim()) return alert("กรุณากรอกชื่องาน");
+      const item: Task = {
+        id: uid("task"),
+        title: taskTitle.trim(),
+        dueDate: taskDue || todayYMD(),
+        priority: taskPriority,
+        done: false,
+        createdAt: Date.now(),
+      };
+      setTasks((prev) => [item, ...prev]);
+      setAddOpen(false);
+      resetForms();
+      return;
+    }
+
+    if (addMode === "โครงการ") {
+      if (!projName.trim()) return alert("กรุณากรอกชื่อโครงการ");
+      const item: Project = {
+        id: uid("proj"),
+        name: projName.trim(),
+        budget: Number.isFinite(projBudget) ? projBudget : 0,
+        quarters: projQuarters.length ? projQuarters : ["Q1"],
+        target: projTarget.trim(),
+        tasks: projTasksDraft,
+        createdAt: Date.now(),
+      };
+      setProjects((prev) => [item, ...prev]);
+      setAddOpen(false);
+      resetForms();
+      return;
+    }
+
+    if (addMode === "โน้ต") {
+      if (!noteTitle.trim() && !noteContent.trim()) return alert("กรุณากรอกโน้ตอย่างน้อย 1 อย่าง");
+      const item: NoteItem = {
+        id: uid("note"),
+        title: noteTitle.trim(),
+        content: noteContent.trim(),
+        color: noteColor,
+        createdAt: Date.now(),
+      };
+      setNotes((prev) => [item, ...prev]);
+      setAddOpen(false);
+      resetForms();
+      return;
+    }
+
+    if (addMode === "บัญชี") {
+      if (!finTitle.trim()) return alert("กรุณากรอกรายการ");
+      if (!Number.isFinite(finAmount)) return alert("จำนวนเงินไม่ถูกต้อง");
+      const item: FinanceItem = {
+        id: uid("fin"),
+        date: finDate || todayYMD(),
+        title: finTitle.trim(),
+        type: finType,
+        amount: Math.abs(finAmount || 0),
+        category: finCategory.trim(),
+        necessity: finNecessity,
+        note: finNote.trim(),
+        createdAt: Date.now(),
+      };
+      setFinance((prev) => [item, ...prev]);
+      setAddOpen(false);
+      resetForms();
+      return;
+    }
+
+    if (addMode === "สุขภาพ") {
+      const item: HealthEntry = {
+        id: uid("health"),
+        date: hDate || todayYMD(),
+        steps: Math.max(0, Math.floor(hSteps || 0)),
+        waterGlasses: Math.max(0, Math.floor(hWater || 0)),
+        teaCoffeeGlasses: Math.max(0, Math.floor(hTea || 0)),
+        sleepHours: Math.max(0, Number(hSleep || 0)),
+        moodLevel: hMood,
+        detail: hDetail.trim(),
+        createdAt: Date.now(),
+      };
+      setHealth((prev) => [item, ...prev]);
+      setAddOpen(false);
+      resetForms();
+      return;
+    }
+  };
+
+  // derived
+  const monthSummary = useMemo(() => {
+    const now = new Date();
+    const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const list = finance.filter((x) => x.date.startsWith(ym));
+    const income = list.filter((x) => x.type === "รายรับ").reduce((s, x) => s + x.amount, 0);
+    const expense = list.filter((x) => x.type === "รายจ่าย").reduce((s, x) => s + x.amount, 0);
+    return { ym, income, expense, net: income - expense };
+  }, [finance]);
+
+  const weekHealthSummary = useMemo(() => {
+    // last 7 days
+    const end = new Date();
+    const start = new Date(end);
+    start.setDate(end.getDate() - 6);
+
+    const inRange = (d: string) => {
+      const dt = new Date(d + "T00:00:00");
+      return dt >= new Date(start.toDateString()) && dt <= new Date(end.toDateString());
+    };
+
+    const list = health.filter((h) => inRange(h.date));
+    if (!list.length) return null;
+
+    const avg = (arr: number[]) => arr.reduce((a, b) => a + b, 0) / Math.max(1, arr.length);
+    const avgSteps = Math.round(avg(list.map((x) => x.steps)));
+    const avgWater = Math.round(avg(list.map((x) => x.waterGlasses)));
+    const avgSleep = Math.round(avg(list.map((x) => x.sleepHours)) * 10) / 10;
+    const avgMood = Math.round(avg(list.map((x) => x.moodLevel)) * 10) / 10;
+
+    return { count: list.length, avgSteps, avgWater, avgSleep, avgMood };
+  }, [health]);
+
+  // actions
+  const toggleTaskDone = (id: string) =>
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)));
+
+  const removeTask = (id: string) => setTasks((prev) => prev.filter((t) => t.id !== id));
+
+  const removeAppt = (id: string) => setAppointments((prev) => prev.filter((x) => x.id !== id));
+
+  const removeNote = (id: string) => setNotes((prev) => prev.filter((x) => x.id !== id));
+
+  const removeFin = (id: string) => setFinance((prev) => prev.filter((x) => x.id !== id));
+
+  const removeProj = (id: string) => setProjects((prev) => prev.filter((x) => x.id !== id));
+
+  const toggleProjectTask = (projId: string, taskId: string) => {
+    setProjects((prev) =>
+      prev.map((p) => {
+        if (p.id !== projId) return p;
+        return {
+          ...p,
+          tasks: p.tasks.map((t) => (t.id === taskId ? { ...t, done: !t.done } : t)),
+        };
+      })
+    );
+  };
+
+  const projectProgress = (p: Project) => {
+    const total = p.tasks.length;
+    const done = p.tasks.filter((t) => t.done).length;
+    if (!total) return 0;
+    return Math.round((done / total) * 100);
+  };
+
+  // UI
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b">
+        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-orange-100 grid place-items-center text-orange-600 font-bold">
+              พ
+            </div>
+            <div>
+              <div className="font-semibold text-gray-900 leading-tight">พี่พร้อม</div>
+              <div className="text-xs text-gray-500">P•PROMPT SURAT</div>
+            </div>
+          </div>
+
+          <button
+            onClick={() => openAdd()}
+            className="inline-flex items-center gap-2 rounded-2xl bg-black text-white px-4 py-2 hover:bg-black/90"
+          >
+            <Plus size={18} />
+            <span className="text-sm">เพิ่ม</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main */}
+      <div className="max-w-5xl mx-auto px-4 pb-24 pt-3">
+        {activeTab === "work" ? (
+          <div className="space-y-6">
+            {/* Today appointments */}
+            <SectionTitle
+              icon={<CalendarDays size={18} />}
+              title="นัดหมายวันนี้"
+              right={
+                <button
+                  className="text-sm text-orange-600 hover:underline"
+                  onClick={() => openAdd("นัด")}
+                >
+                  เพิ่มนัด
+                </button>
+              }
+            />
+
+            {todaysAppointments.length === 0 ? (
+              <div className="rounded-2xl border border-dashed bg-white p-5 text-gray-500 text-sm">
+                วันนี้ยังไม่มีนัด 🗓️
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {todaysAppointments.map((a) => (
+                  <div key={a.id} className="rounded-2xl bg-white border border-gray-100 p-4 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-semibold text-gray-900 truncate">{a.title}</div>
+                        <div className="mt-1 text-sm text-gray-600 flex flex-wrap items-center gap-x-3 gap-y-1">
+                          <span className="inline-flex items-center gap-1">
+                            <Bell size={14} className="text-orange-500" />
+                            {a.startTime}–{a.endTime}
+                          </span>
+                          {a.location ? (
+                            <span className="inline-flex items-center gap-1">
+                              <MapPin size={14} className="text-orange-500" />
+                              {a.location}
+                            </span>
+                          ) : null}
+                        </div>
+                        {a.note ? <div className="mt-2 text-sm text-gray-600">{a.note}</div> : null}
+                        <div className="mt-3">
+                          <a
+                            className="text-sm text-orange-600 hover:underline"
+                            href={buildGCalTemplateUrl({
+                              title: a.title,
+                              date: a.date,
+                              startTime: a.startTime,
+                              endTime: a.endTime,
+                              details: a.note || "สร้างจากพี่พร้อม",
+                              location: a.location,
+                            })}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            เพิ่ม/แก้ใน Google Calendar
+                          </a>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => removeAppt(a.id)}
+                        className="p-2 rounded-xl hover:bg-gray-100 text-gray-500"
+                        aria-label="delete"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Projects */}
+            <SectionTitle
+              icon={<FolderKanban size={18} />}
+              title="โครงการ"
+              right={
+                <button
+                  className="text-sm text-orange-600 hover:underline"
+                  onClick={() => openAdd("โครงการ")}
+                >
+                  สร้างโครงการ
+                </button>
+              }
+            />
+
+            {projects.length === 0 ? (
+              <div className="rounded-2xl border border-dashed bg-white p-5 text-gray-500 text-sm">
+                ยังไม่มีโครงการ ลองสร้างโครงการแรกดู ✨
+              </div>
+            ) : (
+              <div className="grid sm:grid-cols-2 gap-3">
+                {projects.map((p) => {
+                  const prog = projectProgress(p);
+                  return (
+                    <div key={p.id} className="rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 text-white p-4 shadow-sm">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-xs text-white/70">
+                            {p.quarters.join(", ")} • งบ {p.budget.toLocaleString()} บาท
+                          </div>
+                          <div className="mt-1 font-semibold truncate">{p.name}</div>
+                          {p.target ? <div className="mt-1 text-sm text-white/70">เป้าหมาย: {p.target}</div> : null}
+                        </div>
+                        <button
+                          onClick={() => removeProj(p.id)}
+                          className="p-2 rounded-xl hover:bg-white/10 text-white/80"
+                          aria-label="delete"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+
+                      <div className="mt-3">
+                        <div className="text-xs text-white/70 mb-2">PROGRESS {prog}%</div>
+                        <div className="h-2 w-full rounded-full bg-white/15 overflow-hidden">
+                          <div className="h-full bg-orange-400" style={{ width: `${prog}%` }} />
+                        </div>
+                      </div>
+
+                      {/* project tasks */}
+                      {p.tasks.length ? (
+                        <div className="mt-4 space-y-2">
+                          {p.tasks.slice(0, 4).map((t) => (
+                            <button
+                              key={t.id}
+                              onClick={() => toggleProjectTask(p.id, t.id)}
+                              className="w-full text-left flex items-center gap-2 rounded-xl bg-white/10 hover:bg-white/15 px-3 py-2"
+                            >
+                              <CheckCircle2 size={16} className={t.done ? "text-orange-300" : "text-white/40"} />
+                              <span className={t.done ? "line-through text-white/60" : "text-white/90"}>
+                                {t.title}
+                              </span>
+                            </button>
+                          ))}
+                          {p.tasks.length > 4 ? (
+                            <div className="text-xs text-white/60">+ อีก {p.tasks.length - 4} รายการ</div>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <div className="mt-4 text-sm text-white/60">ยังไม่มีรายการกิจกรรมของโครงการ</div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Tasks */}
+            <SectionTitle
+              icon={<ClipboardList size={18} />}
+              title="งานทั่วไป"
+              right={
+                <button className="text-sm text-orange-600 hover:underline" onClick={() => openAdd("งาน")}>
+                  เพิ่มงาน
+                </button>
+              }
+            />
+            {tasks.length === 0 ? (
+              <div className="rounded-2xl border border-dashed bg-white p-5 text-gray-500 text-sm">
+                วันนี้มีเวลาให้หายใจ 😄 ยังไม่มีงานในลิสต์
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {tasks
+                  .slice()
+                  .sort((a, b) => (a.done === b.done ? 0 : a.done ? 1 : -1))
+                  .map((t) => (
+                    <div key={t.id} className="rounded-2xl bg-white border border-gray-100 p-4 shadow-sm">
+                      <div className="flex items-center justify-between gap-3">
+                        <button className="flex items-center gap-3 min-w-0" onClick={() => toggleTaskDone(t.id)}>
+                          <div
+                            className={[
+                              "w-6 h-6 rounded-full border grid place-items-center",
+                              t.done ? "bg-orange-500 border-orange-500 text-white" : "bg-white border-gray-300",
+                            ].join(" ")}
+                          >
+                            {t.done ? <CheckCircle2 size={16} /> : null}
+                          </div>
+                          <div className="min-w-0 text-left">
+                            <div className={["font-medium truncate", t.done ? "line-through text-gray-400" : "text-gray-900"].join(" ")}>
+                              {t.title}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              ครบกำหนด {t.dueDate} • Priority: {t.priority}
+                            </div>
+                          </div>
+                        </button>
+                        <button onClick={() => removeTask(t.id)} className="p-2 rounded-xl hover:bg-gray-100 text-gray-500">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
+        ) : null}
+
+        {activeTab === "memo" ? (
+          <div className="space-y-6">
+            <SectionTitle
+              icon={<StickyNote size={18} />}
+              title="โน้ต"
+              right={
+                <button className="text-sm text-orange-600 hover:underline" onClick={() => openAdd("โน้ต")}>
+                  เพิ่มโน้ต
+                </button>
+              }
+            />
+            {notes.length === 0 ? (
+              <div className="rounded-2xl border border-dashed bg-white p-5 text-gray-500 text-sm">
+                ยังไม่มีโน้ต ลองจดอะไรสั้นๆไว้ก่อน ✍️
+              </div>
+            ) : (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {notes.map((n) => (
+                  <div key={n.id} className={["rounded-2xl border border-gray-100 p-4 shadow-sm", n.color].join(" ")}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-semibold text-gray-900 truncate">{n.title || "โน้ต"}</div>
+                        <div className="mt-2 text-sm text-gray-700 whitespace-pre-wrap">{n.content}</div>
+                      </div>
+                      <button onClick={() => removeNote(n.id)} className="p-2 rounded-xl hover:bg-black/5 text-gray-600">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : null}
+
+        {activeTab === "finance" ? (
+          <div className="space-y-6">
+            <SectionTitle
+              icon={<Wallet size={18} />}
+              title="บัญชี"
+              right={
+                <button className="text-sm text-orange-600 hover:underline" onClick={() => openAdd("บัญชี")}>
+                  เพิ่มรายการ
+                </button>
+              }
+            />
+
+            <div className="grid sm:grid-cols-4 gap-3">
+              <StatCard label="รายรับเดือนนี้" value={monthSummary.income.toLocaleString()} sub={`เดือน ${monthSummary.ym}`} />
+              <StatCard label="รายจ่ายเดือนนี้" value={monthSummary.expense.toLocaleString()} />
+              <StatCard label="คงเหลือสุทธิ" value={monthSummary.net.toLocaleString()} />
+              <StatCard label="รายการทั้งหมด" value={String(finance.length)} />
+            </div>
+
+            {finance.length === 0 ? (
+              <div className="rounded-2xl border border-dashed bg-white p-5 text-gray-500 text-sm">
+                ยังไม่มีรายการบัญชี
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {finance.slice(0, 30).map((f) => (
+                  <div key={f.id} className="rounded-2xl bg-white border border-gray-100 p-4 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-xs text-gray-500">{f.date}</div>
+                        <div className="font-semibold text-gray-900 truncate">{f.title}</div>
+                        <div className="mt-1 text-sm text-gray-600">
+                          {f.type === "รายรับ" ? "รับ" : "จ่าย"} {f.amount.toLocaleString()} • {f.category || "ไม่ระบุหมวด"} •{" "}
+                          {f.type === "รายจ่าย" ? f.necessity : "—"}
+                        </div>
+                        {f.note ? <div className="mt-2 text-sm text-gray-600">{f.note}</div> : null}
+                      </div>
+                      <button onClick={() => removeFin(f.id)} className="p-2 rounded-xl hover:bg-gray-100 text-gray-500">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : null}
+
+        {activeTab === "health" ? (
+          <div className="space-y-6">
+            <SectionTitle
+              icon={<HeartPulse size={18} />}
+              title="สุขภาพ"
+              right={
+                <button className="text-sm text-orange-600 hover:underline" onClick={() => openAdd("สุขภาพ")}>
+                  บันทึกวันนี้
+                </button>
+              }
+            />
+
+            {weekHealthSummary ? (
+              <div className="grid sm:grid-cols-4 gap-3">
+                <StatCard label="เฉลี่ยก้าว/วัน" value={weekHealthSummary.avgSteps.toLocaleString()} sub={`จาก ${weekHealthSummary.count} วันล่าสุด`} />
+                <StatCard label="เฉลี่ยน้ำ/วัน (แก้ว)" value={String(weekHealthSummary.avgWater)} />
+                <StatCard label="เฉลี่ยนอน/วัน (ชม.)" value={String(weekHealthSummary.avgSleep)} />
+                <StatCard label="เฉลี่ยอารมณ์" value={String(weekHealthSummary.avgMood)} sub="(1-5)" />
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed bg-white p-5 text-gray-500 text-sm">
+                ยังไม่มีข้อมูลพอให้สรุปสัปดาห์ ลองบันทึกเพิ่มอีกนิด 🙂
+              </div>
+            )}
+
+            {health.length === 0 ? (
+              <div className="rounded-2xl border border-dashed bg-white p-5 text-gray-500 text-sm">
+                ยังไม่มีบันทึกสุขภาพ
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {health.slice(0, 14).map((h) => (
+                  <div key={h.id} className="rounded-2xl bg-white border border-gray-100 p-4 shadow-sm">
+                    <div className="text-xs text-gray-500">{h.date}</div>
+                    <div className="mt-2 grid sm:grid-cols-5 gap-2 text-sm text-gray-700">
+                      <div className="rounded-xl bg-gray-50 p-3">ก้าว: <b className="text-gray-900">{h.steps}</b></div>
+                      <div className="rounded-xl bg-gray-50 p-3">น้ำ: <b className="text-gray-900">{h.waterGlasses}</b></div>
+                      <div className="rounded-xl bg-gray-50 p-3">ชา/กาแฟ: <b className="text-gray-900">{h.teaCoffeeGlasses}</b></div>
+                      <div className="rounded-xl bg-gray-50 p-3">นอน: <b className="text-gray-900">{h.sleepHours}</b></div>
+                      <div className="rounded-xl bg-gray-50 p-3">อารมณ์: <b className="text-gray-900">{h.moodLevel}/5</b></div>
+                    </div>
+                    {h.detail ? <div className="mt-3 text-sm text-gray-600 whitespace-pre-wrap">{h.detail}</div> : null}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : null}
+      </div>
+
+      {/* Bottom Nav */}
+      <div className="fixed bottom-0 inset-x-0 z-40">
+        <div className="max-w-5xl mx-auto px-4 pb-4">
+          <div className="rounded-3xl bg-white border shadow-lg px-3 py-2 flex items-center justify-between">
+            <button
+              onClick={() => setActiveTab("work")}
+              className={[
+                "flex-1 rounded-2xl py-2 px-2 flex flex-col items-center gap-1",
+                activeTab === "work" ? "text-orange-600" : "text-gray-400",
+              ].join(" ")}
+            >
+              <ClipboardList size={18} />
+              <div className="text-[11px]">งาน</div>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("memo")}
+              className={[
+                "flex-1 rounded-2xl py-2 px-2 flex flex-col items-center gap-1",
+                activeTab === "memo" ? "text-orange-600" : "text-gray-400",
+              ].join(" ")}
+            >
+              <StickyNote size={18} />
+              <div className="text-[11px]">โน้ต</div>
+            </button>
+
+            <button
+              onClick={() => openAdd()}
+              className="mx-2 w-14 h-14 rounded-2xl bg-black text-white grid place-items-center -mt-6 shadow-lg"
+              aria-label="add"
+            >
+              <Plus size={20} />
+            </button>
+
+            <button
+              onClick={() => setActiveTab("finance")}
+              className={[
+                "flex-1 rounded-2xl py-2 px-2 flex flex-col items-center gap-1",
+                activeTab === "finance" ? "text-orange-600" : "text-gray-400",
+              ].join(" ")}
+            >
+              <Wallet size={18} />
+              <div className="text-[11px]">บัญชี</div>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("health")}
+              className={[
+                "flex-1 rounded-2xl py-2 px-2 flex flex-col items-center gap-1",
+                activeTab === "health" ? "text-orange-600" : "text-gray-400",
+              ].join(" ")}
+            >
+              <HeartPulse size={18} />
+              <div className="text-[11px]">สุขภาพ</div>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Quote popup */}
+      <Modal open={quoteOpen} onClose={() => setQuoteOpen(false)}>
+        <div className="text-center">
+          <div className="w-14 h-14 rounded-full bg-orange-50 mx-auto grid place-items-center text-2xl">
+            😄
+          </div>
+          <div className="mt-4 text-lg font-semibold text-gray-900">"{quoteText}"</div>
+          <button
+            onClick={() => setQuoteOpen(false)}
+            className="mt-6 w-full rounded-2xl bg-black text-white py-3 hover:bg-black/90"
+          >
+            ลุยงานกันเลยครับ!
+          </button>
+        </div>
+      </Modal>
+
+      {/* Greeting (3 questions) */}
+      <Modal open={greetOpen} onClose={() => setGreetOpen(false)} title="ก่อนเริ่มวันนี้ พี่พร้อมขอถาม 3 ข้อ 🙂">
+        <div className="space-y-3">
+          <div>
+            <div className="text-sm text-gray-700 mb-2">1) วันนี้อยากให้พี่พร้อมช่วยเรื่องไหนที่สุด?</div>
+            <Input value={greetA} onChange={(e) => setGreetA(e.target.value)} placeholder="เช่น งานด่วน/สุขภาพ/จัดเวลา/ฮีลใจ" />
+          </div>
+          <div>
+            <div className="text-sm text-gray-700 mb-2">2) สิ่งเดียวที่ทำได้แล้ว “ถือว่าชนะ” วันนี้คืออะไร?</div>
+            <Input value={greetB} onChange={(e) => setGreetB(e.target.value)} placeholder="เช่น ทำงาน 1 อย่างให้จบ/เดิน 15 นาที/นอนให้พอ" />
+          </div>
+          <div>
+            <div className="text-sm text-gray-700 mb-2">3) ให้คะแนนพลังใจตอนนี้ (1–5)</div>
+            <Input value={greetC} onChange={(e) => setGreetC(e.target.value)} placeholder="พิมพ์ 1-5 หรือคำสั้นๆ" />
+          </div>
+          <button
+            onClick={() => setGreetOpen(false)}
+            className="mt-2 w-full rounded-2xl bg-orange-500 text-white py-3 hover:bg-orange-600"
+          >
+            เริ่มวันนี้ไปด้วยกัน
+          </button>
+          <div className="text-xs text-gray-500">
+            (คำตอบนี้เก็บไว้ในหน้านี้ก่อน ยังไม่ส่งออกไปไหน — เฟสถัดไปค่อยเชื่อม AI/Firestore)
+          </div>
+        </div>
+      </Modal>
+
+      {/* Add modal */}
+      <Modal
+        open={addOpen}
+        onClose={() => {
+          setAddOpen(false);
+        }}
+        title="เพิ่มรายการใหม่"
+        wide={addMode === "โครงการ"}
+      >
+        <div className="flex flex-wrap gap-2 mb-4">
+          {(["นัด", "งาน", "โครงการ", "โน้ต", "บัญชี", "สุขภาพ"] as AddMode[]).map((m) => (
+            <Pill key={m} active={addMode === m} onClick={() => setAddMode(m)}>
+              {m}
+            </Pill>
+          ))}
+        </div>
+
+        {addMode === "นัด" ? (
+          <div className="space-y-3">
+            <Input value={apptTitle} onChange={(e) => setApptTitle(e.target.value)} placeholder="หัวข้อเรื่อง / รายการนัด" />
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <div className="text-xs text-gray-500 mb-1">วันที่</div>
+                <Input type="date" value={apptDate} onChange={(e) => setApptDate(e.target.value)} />
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 mb-1">เริ่ม</div>
+                <Input type="time" value={apptStart} onChange={(e) => setApptStart(e.target.value)} />
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 mb-1">สิ้นสุด</div>
+                <Input type="time" value={apptEnd} onChange={(e) => setApptEnd(e.target.value)} />
+              </div>
+            </div>
+
+            <Input
+              value={apptLocation}
+              onChange={(e) => setApptLocation(e.target.value)}
+              placeholder="สถานที่ (เช่น ห้องประชุม/คาเฟ่/ออนไลน์)"
+            />
+
+            <Textarea
+              rows={3}
+              value={apptNote}
+              onChange={(e) => setApptNote(e.target.value)}
+              placeholder="รายละเอียดเพิ่มเติม (ถ้ามี)"
+            />
+
+            <label className="flex items-center gap-2 text-sm text-gray-700 select-none">
+              <input
+                type="checkbox"
+                checked={apptAddToGCal}
+                onChange={(e) => setApptAddToGCal(e.target.checked)}
+              />
+              เพิ่มเข้า Google Calendar หลังบันทึก (แนะนำ: เพื่อให้แจ้งเตือนเข้าโทรศัพท์ได้)
+            </label>
+          </div>
+        ) : null}
+
+        {addMode === "งาน" ? (
+          <div className="space-y-3">
+            <Input value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} placeholder="ชื่องาน" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <div className="text-xs text-gray-500 mb-1">ครบกำหนด</div>
+                <Input type="date" value={taskDue} onChange={(e) => setTaskDue(e.target.value)} />
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 mb-1">Priority</div>
+                <select
+                  value={taskPriority}
+                  onChange={(e) => setTaskPriority(e.target.value as Task["priority"])}
+                  className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-orange-300"
+                >
+                  <option value="ต่ำ">ต่ำ</option>
+                  <option value="กลาง">กลาง</option>
+                  <option value="สูง">สูง</option>
+                </select>
+              </div>
+            </div>
+            <Textarea rows={3} placeholder="รายละเอียดเพิ่มเติม (ถ้ามี)" />
+          </div>
+        ) : null}
+
+        {addMode === "โครงการ" ? (
+          <div className="space-y-4">
+            <Input value={projName} onChange={(e) => setProjName(e.target.value)} placeholder="ชื่อโครงการ" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <div className="text-xs text-gray-500 mb-1">งบประมาณ (บาท)</div>
+                <Input
+                  type="number"
+                  value={projBudget}
+                  onChange={(e) => setProjBudget(Number(e.target.value))}
+                  placeholder="0"
+                />
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 mb-1">ไตรมาส (เลือกได้หลายอัน)</div>
+                <div className="flex flex-wrap gap-2">
+                  {(["Q1", "Q2", "Q3", "Q4"] as const).map((q) => {
+                    const active = projQuarters.includes(q);
+                    return (
+                      <button
+                        key={q}
+                        type="button"
+                        onClick={() => {
+                          setProjQuarters((prev) => {
+                            if (prev.includes(q)) {
+                              const next = prev.filter((x) => x !== q);
+                              return next.length ? next : ["Q1"];
+                            }
+                            return [...prev, q];
+                          });
+                        }}
+                        className={[
+                          "px-3 py-2 rounded-xl border text-sm",
+                          active ? "bg-orange-50 border-orange-300 text-orange-700" : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50",
+                        ].join(" ")}
+                      >
+                        {q}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <Input value={projTarget} onChange={(e) => setProjTarget(e.target.value)} placeholder="เป้าหมายคือใคร / กลุ่มเป้าหมาย" />
+
+            <div className="rounded-2xl border border-gray-100 bg-white p-4">
+              <div className="font-semibold text-gray-900 mb-2">กิจกรรมที่ต้องทำ (Task ของโครงการ)</div>
+              <div className="flex gap-2">
+                <Input
+                  value={projTaskDraft}
+                  onChange={(e) => setProjTaskDraft(e.target.value)}
+                  placeholder="พิมพ์รายการ แล้วกด +"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const t = projTaskDraft.trim();
+                    if (!t) return;
+                    setProjTasksDraft((prev) => [...prev, { id: uid("pt"), title: t, done: false }]);
+                    setProjTaskDraft("");
+                  }}
+                  className="shrink-0 px-4 rounded-xl bg-black text-white hover:bg-black/90"
+                >
+                  <Plus size={18} />
+                </button>
+              </div>
+              {projTasksDraft.length ? (
+                <div className="mt-3 space-y-2">
+                  {projTasksDraft.map((t) => (
+                    <div key={t.id} className="flex items-center justify-between gap-2 rounded-xl bg-gray-50 px-3 py-2">
+                      <div className="text-sm text-gray-800">{t.title}</div>
+                      <button
+                        type="button"
+                        onClick={() => setProjTasksDraft((prev) => prev.filter((x) => x.id !== t.id))}
+                        className="p-2 rounded-lg hover:bg-gray-100 text-gray-500"
+                        aria-label="remove"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="mt-3 text-sm text-gray-500">ยังไม่มีรายการกิจกรรม</div>
+              )}
+            </div>
+          </div>
+        ) : null}
+
+        {addMode === "โน้ต" ? (
+          <div className="space-y-3">
+            <Input value={noteTitle} onChange={(e) => setNoteTitle(e.target.value)} placeholder="หัวข้อโน้ต (ไม่ใส่ก็ได้)" />
+            <Textarea rows={5} value={noteContent} onChange={(e) => setNoteContent(e.target.value)} placeholder="พิมพ์สิ่งที่อยากจำไว้..." />
+
+            <div>
+              <div className="text-xs text-gray-500 mb-2">สีโน้ต</div>
+              <div className="flex items-center gap-3">
+                {pastelColors.map((c) => {
+                  const active = noteColor === c.cls;
+                  return (
+                    <button
+                      key={c.cls}
+                      type="button"
+                      onClick={() => setNoteColor(c.cls)}
+                      className={[
+                        "w-10 h-10 rounded-full border grid place-items-center",
+                        c.cls,
+                        active ? "ring-2 ring-orange-300 border-orange-300" : "border-white hover:ring-2 hover:ring-gray-200",
+                      ].join(" ")}
+                      aria-label={c.name}
+                    >
+                      {active ? <CheckCircle2 size={16} className="text-orange-600" /> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {addMode === "บัญชี" ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <div className="text-xs text-gray-500 mb-1">วันที่</div>
+                <Input type="date" value={finDate} onChange={(e) => setFinDate(e.target.value)} />
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 mb-1">ประเภท</div>
+                <select
+                  value={finType}
+                  onChange={(e) => setFinType(e.target.value as FinanceItem["type"])}
+                  className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-200 focus:border-orange-300"
+                >
+                  <option value="รายรับ">รายรับ</option>
+                  <option value="รายจ่าย">รายจ่าย</option>
+                </select>
+              </div>
+            </div>
+
+            <Input value={finTitle} onChange={(e) => setFinTitle(e.target.value)} placeholder="รายการ" />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <div className="text-xs text-gray-500 mb-1">จำนวนเงิน</div>
+                <Input type="number" value={finAmount} onChange={(e) => setFinAmount(Number(e.target.value))} placeholder="0" />
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 mb-1">หมวดหมู่</div>
+                <Input value={finCategory} onChange={(e) => setFinCategory(e.target.value)} placeholder="เช่น อาหาร/เดินทาง/ช้อป" />
+              </div>
+            </div>
+
+            {finType === "รายจ่าย" ? (
+              <div>
+                <div className="text-xs text-gray-500 mb-1">จำเป็น/ฟุ่มเฟือย</div>
+                <div className="flex gap-2">
+                  <Pill active={finNecessity === "จำเป็น"} onClick={() => setFinNecessity("จำเป็น")}>
+                    จำเป็น
+                  </Pill>
+                  <Pill active={finNecessity === "ฟุ่มเฟือย"} onClick={() => setFinNecessity("ฟุ่มเฟือย")}>
+                    ฟุ่มเฟือย
+                  </Pill>
+                </div>
+              </div>
+            ) : null}
+
+            <Textarea rows={3} value={finNote} onChange={(e) => setFinNote(e.target.value)} placeholder="หมายเหตุ (ถ้ามี)" />
+          </div>
+        ) : null}
+
+        {addMode === "สุขภาพ" ? (
+          <div className="space-y-4">
+            <div>
+              <div className="text-xs text-gray-500 mb-1">วันที่</div>
+              <Input type="date" value={hDate} onChange={(e) => setHDate(e.target.value)} />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              <div>
+                <div className="text-xs text-gray-500 mb-1">จำนวนก้าว</div>
+                <Input type="number" value={hSteps} onChange={(e) => setHSteps(Number(e.target.value))} placeholder="0" />
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 mb-1">น้ำ (แก้ว)</div>
+                <Input type="number" value={hWater} onChange={(e) => setHWater(Number(e.target.value))} placeholder="0" />
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 mb-1">ชา/กาแฟ (แก้ว)</div>
+                <Input type="number" value={hTea} onChange={(e) => setHTea(Number(e.target.value))} placeholder="0" />
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 mb-1">นอน (ชม.)</div>
+                <Input type="number" value={hSleep} onChange={(e) => setHSleep(Number(e.target.value))} placeholder="0" />
+              </div>
+            </div>
+
+            <div>
+              <div className="text-sm font-semibold text-gray-900 mb-2">อารมณ์วันนี้</div>
+              <SmileyScale value={hMood} onChange={setHMood} />
+            </div>
+
+            <Textarea rows={4} value={hDetail} onChange={(e) => setHDetail(e.target.value)} placeholder="วันนี้เกิดอะไรขึ้น / อยากเล่าอะไรให้พี่พร้อมฟัง" />
+            <div className="text-xs text-gray-500">
+              (เฟสถัดไป: ตรงนี้จะส่งเข้า AI เพื่อ “ตอบกลับกำลังใจ” + สรุปสุขภาพรายสัปดาห์แบบฉลาดขึ้น)
+            </div>
+          </div>
+        ) : null}
+
+        <div className="mt-5 flex gap-2">
+          <button
+            onClick={() => {
+              setAddOpen(false);
+              resetForms();
+            }}
+            className="flex-1 rounded-2xl border border-gray-200 bg-white py-3 hover:bg-gray-50"
+          >
+            ยกเลิก
+          </button>
+          <button onClick={handleSave} className="flex-1 rounded-2xl bg-black text-white py-3 hover:bg-black/90">
+            บันทึก
+          </button>
+        </div>
+      </Modal>
+    </div>
+  );
+}
