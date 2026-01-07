@@ -1,121 +1,96 @@
-import { useState } from "react";
-import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  updateProfile,
-} from "firebase/auth";
+import { useEffect, useState } from "react";
 import { auth } from "./lib/firebase";
-import logo from "./assets/logo.png";
+import {
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+  onAuthStateChanged,
+  signOut,
+  User,
+} from "firebase/auth";
 
-export default function Auth() {
-  const [mode, setMode] = useState<"login" | "signup">("login");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [displayName, setDisplayName] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string>("");
+export default function AuthGate({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<User | null>(auth.currentUser);
+  const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
 
-  const submit = async () => {
-    setErr("");
-    setLoading(true);
-    try {
-      if (mode === "login") {
-        await signInWithEmailAndPassword(auth, email.trim(), password);
-      } else {
-        const cred = await createUserWithEmailAndPassword(
-          auth,
-          email.trim(),
-          password
-        );
-        if (displayName.trim()) {
-          await updateProfile(cred.user, { displayName: displayName.trim() });
-        }
+  useEffect(() => {
+    // สำคัญ: รับผลจาก redirect login (กรณี popup โดนบล็อก)
+    (async () => {
+      try {
+        await getRedirectResult(auth);
+      } catch (e: any) {
+        const msg = e?.message ? String(e.message) : "เข้าสู่ระบบไม่สำเร็จ";
+        setAuthError(msg);
       }
-    } catch (e: any) {
-      setErr(e?.message || "เกิดข้อผิดพลาด");
-    } finally {
+    })();
+
+    return onAuthStateChanged(auth, (u) => {
+      setUser(u);
       setLoading(false);
+    });
+  }, []);
+
+  async function signInGoogle() {
+    setAuthError(null);
+    const provider = new GoogleAuthProvider();
+
+    try {
+      // ลอง popup ก่อน (ในบาง environment ใช้ได้)
+      await signInWithPopup(auth, provider);
+    } catch (e: any) {
+      const code = String(e?.code || "");
+
+      // ถ้า popup โดนบล็อก/ถูกปิด/ไม่อนุญาต → ใช้ redirect แทน
+      if (
+        code === "auth/popup-blocked" ||
+        code === "auth/popup-closed-by-user" ||
+        code === "auth/cancelled-popup-request"
+      ) {
+        await signInWithRedirect(auth, provider);
+        return;
+      }
+
+      // error อื่น ๆ ให้โชว์ข้อความ
+      const msg = e?.message ? String(e.message) : "เข้าสู่ระบบไม่สำเร็จ";
+      setAuthError(msg);
     }
-  };
+  }
+
+  if (loading) return <div className="p-6 text-sm text-gray-500">กำลังโหลด…</div>;
+  if (user) return <>{children}</>;
 
   return (
-    <div className="min-h-screen bg-gray-50 grid place-items-center p-4">
-      <div className="w-full max-w-md rounded-3xl bg-white border shadow-sm p-6">
-        <div className="flex items-center gap-3 mb-6">
-        <img
-  src={logo}
-  alt="พี่พร้อม"
-  className="w-10 h-10 rounded-full object-contain"
-/>
-
-          <div>
-            <div className="font-semibold text-gray-900">พี่พร้อม</div>
-            <div className="text-xs text-gray-500">เพื่อนคู่ใจ ไปไหนไปกัน</div>
-          </div>
-        </div>
-
-        <div className="flex gap-2 mb-4">
-          <button
-            className={[
-              "flex-1 rounded-2xl py-2 text-sm border",
-              mode === "login"
-                ? "bg-black text-white border-black"
-                : "bg-white text-gray-700 border-gray-200",
-            ].join(" ")}
-            onClick={() => setMode("login")}
-          >
-            Login
-          </button>
-          <button
-            className={[
-              "flex-1 rounded-2xl py-2 text-sm border",
-              mode === "signup"
-                ? "bg-black text-white border-black"
-                : "bg-white text-gray-700 border-gray-200",
-            ].join(" ")}
-            onClick={() => setMode("signup")}
-          >
-            Signup
-          </button>
-        </div>
-
-        {mode === "signup" ? (
-          <input
-            className="w-full rounded-2xl border px-4 py-3 text-sm mb-3"
-            placeholder="ชื่อที่อยากให้เรียก (ไม่ใส่ก็ได้)"
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-          />
-        ) : null}
-
-        <input
-          className="w-full rounded-2xl border px-4 py-3 text-sm mb-3"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-        <input
-          className="w-full rounded-2xl border px-4 py-3 text-sm mb-3"
-          placeholder="Password"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-
-        {err ? <div className="text-sm text-red-600 mb-3">{err}</div> : null}
+    <div className="min-h-screen flex items-center justify-center p-6 bg-white">
+      <div className="w-full max-w-sm rounded-3xl border bg-white p-6">
+        <div className="text-lg font-semibold mb-1">พี่พร้อม</div>
+        <div className="text-sm text-gray-500 mb-4">เข้าสู่ระบบเพื่อใช้งาน</div>
 
         <button
-          className="w-full rounded-2xl bg-orange-500 text-white py-3 hover:bg-orange-600 disabled:opacity-60"
-          onClick={submit}
-          disabled={loading || !email.trim() || !password}
+          onClick={signInGoogle}
+          className="w-full rounded-2xl bg-black text-white py-3 hover:bg-black/90"
         >
-          {loading ? "กำลังเข้า..." : mode === "login" ? "เข้าใช้งาน" : "สร้างบัญชี"}
+          เข้าสู่ระบบด้วย Google
         </button>
 
-        <div className="text-xs text-gray-500 mt-4">
-          * ใช้ Firebase Auth (Email/Password)
-        </div>
+        {authError && (
+          <div className="mt-3 text-xs text-red-600 break-words">
+            {authError}
+          </div>
+        )}
       </div>
     </div>
+  );
+}
+
+export function LogoutButton() {
+  return (
+    <button
+      onClick={() => signOut(auth)}
+      className="rounded-2xl border px-3 py-2 text-sm hover:bg-gray-50"
+    >
+      ออกจากระบบ
+    </button>
   );
 }

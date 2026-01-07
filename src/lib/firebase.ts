@@ -1,22 +1,25 @@
-import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
-import { getFunctions } from "firebase/functions";
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
+import { getFunctions } from 'firebase/functions';
 
-// ✅ Firebase config (ของไหม)
+// Firebase configuration using Vite environment variables
+// ต้องตั้งค่าในไฟล์ .env เช่น VITE_FIREBASE_API_KEY=...
 const firebaseConfig = {
-  apiKey: "AIzaSyDKxHVKU9F36vD8_qgX00UfZNPCMiknXqM",
-  authDomain: "p-prompt.firebaseapp.com",
-  projectId: "p-prompt",
-  storageBucket: "p-prompt.firebasestorage.app",
-  messagingSenderId: "566289872852",
-  appId: "1:566289872852:web:4ea11ccbe1c619fded0841",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
 
-export const app = initializeApp(firebaseConfig);
+// Initialize Firebase (Singleton pattern)
+const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
+// Export instances for use across the app
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+export const functions = getFunctions(app);
 
-// ✅ ใช้ region เดียวกับ functions ที่ deploy (us-central1)
-export const functions = getFunctions(app, "us-central1");
+export default app;

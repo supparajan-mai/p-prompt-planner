@@ -1,16 +1,15 @@
-// src/components/Input.tsx
 import * as React from "react";
 
-type Props = React.InputHTMLAttributes<HTMLInputElement> & {
+type Props = React.TextareaHTMLAttributes<HTMLTextAreaElement> & {
   label?: string;
   hint?: string;
 };
 
-export default function Input({ label, hint, className = "", ...props }: Props) {
+export default function Textarea({ label, hint, className = "", ...props }: Props) {
   return (
     <label className="block">
       {label ? <div className="mb-1 text-sm font-medium text-gray-800">{label}</div> : null}
-      <input
+      <textarea
         {...props}
         className={
           "w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm " +

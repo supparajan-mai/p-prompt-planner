@@ -1,5 +1,12 @@
 import MainApp from "./app/MainApp";
+import AuthGate from "./Auth";
 
 export default function App() {
-  return <MainApp />;
+  return (
+    <AuthGate>
+      <MainApp />
+    </AuthGate>
+  );
 }
+
+
