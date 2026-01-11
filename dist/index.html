@@ -1,0 +1,12 @@
+<script>
+const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+const isStackBlitz = location.hostname.includes('stackblitz') || location.hostname.includes('webcontainer');
+
+if (!isLocal && !isStackBlitz && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' })
+      .then(reg => reg.update())
+      .catch(err => console.error('Worker ลาหยุด:', err));
+  });
+}
+</script>
