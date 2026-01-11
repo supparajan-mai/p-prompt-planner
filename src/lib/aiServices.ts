@@ -1,21 +1,25 @@
 // src/lib/aiServices.ts
-export async function callOpenAI(prompt: string) {
-  // ดึงค่าจาก Secret ที่ตั้งไว้ใน Netlify หรือ .env
-  const apiKey = import.meta.env.VITE_OPENAI_API_KEY; 
-  
-  if (!apiKey) return "ไม่พบ API Key จ๊ะ";
+/**
+ * เรียก OpenAI ผ่าน Netlify Function (ปลอดภัย - ไม่มี API Key ใน Frontend)
+ */
+ export async function callOpenAI(prompt: string) {
+  try {
+    const response = await fetch('/.netlify/functions/openai', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json' 
+      },
+      body: JSON.stringify({ prompt })
+    });
 
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }]
-    })
-  });
-  const data = await response.json();
-  return data.choices[0].message.content;
+    if (!response.ok) {
+      throw new Error('Function call failed');
+    }
+    
+    const data = await response.json();
+    return data.message || "พี่พร้อมขออภัย ระบบขัดข้องจ๊ะ";
+  } catch (error) {
+    console.error('OpenAI Error:', error);
+    return "พี่พร้อมขออภัย ระบบขัดข้องจ๊ะ";
+  }
 }
