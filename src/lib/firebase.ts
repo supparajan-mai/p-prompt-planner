@@ -1,29 +1,25 @@
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
-import { getFunctions } from 'firebase/functions';
-import { getStorage } from 'firebase/storage';
-import { getDatabase } from 'firebase/database';
+export async function callOpenAI(prompt: string) {
+  const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+  if (!apiKey) return "ไม่พบคีย์ AI จ๊ะ";
 
-const firebaseConfig = typeof __firebase_config !== 'undefined' 
-  ? JSON.parse(__firebase_config) 
-  : {
-      apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyDKxHVKU9F36vD8_qgX00UfZNPCMiknXqM",
-      authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "p-prompt.firebaseapp.com",
-      databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || "https://p-prompt-default-rtdb.asia-southeast1.firebasedatabase.app",
-      projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "p-prompt",
-      storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "p-prompt.firebasestorage.app",
-      messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "566289872852",
-      appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:566289872852:web:4ea11ccbe1c619fded0841"
-    };
-
-// Singleton pattern ป้องกันการ Initialize ซ้ำ
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-
-export const auth = getAuth(app);
-export const db = getFirestore(app);           // สำหรับ Firestore
-export const rtdb = getDatabase(app);          // สำหรับ Realtime DB (เชื่อม Sheet)
-export const storage = getStorage(app);        // สำหรับเก็บสลิปโอนเงิน
-export const functions = getFunctions(app);
-
-export default app;
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: "คุณคือพี่พร้อม ผู้ช่วยที่อบอุ่น" },
+          { role: "user", content: prompt }
+        ]
+      })
+    });
+    const result = await response.json();
+    return result.choices[0].message.content;
+  } catch (error) {
+    return "พี่พร้อมขออภัย ระบบขัดข้องจ๊ะ";
+  }
+}

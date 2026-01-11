@@ -1,139 +1,45 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  getDatabase, ref, onValue 
-} from "firebase/database";
-import { 
-  getAuth, 
-  onAuthStateChanged,
-  signInAnonymously,
-  signInWithCustomToken
-} from "firebase/auth";
-import { initializeApp } from "firebase/app";
-import { 
-  ShieldCheck, 
-  Sparkles, 
-  User,
-  Award,
-  ChevronDown
-} from 'lucide-react';
-
-// --- 1. การตั้งค่าระบบ (Firebase Configuration) ---
-const firebaseConfig = typeof __firebase_config !== 'undefined' 
-  ? JSON.parse(__firebase_config) 
-  : {
-      apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyDKxHVKU9F36vD8_qgX00UfZNPCMiknXqM",
-      authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "p-prompt.firebaseapp.com",
-      databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || "https://p-prompt-default-rtdb.asia-southeast1.firebasedatabase.app",
-      projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "p-prompt",
-      storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "p-prompt.firebasestorage.app",
-      messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "566289872852",
-      appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:566289872852:web:4ea11ccbe1c619fded0841"
-    };
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getDatabase(app);
-const rawAppId = typeof __app_id !== 'undefined' ? __app_id : 'p-prompt-planner';
-const appId = rawAppId.replace(/[.#$[\]]/g, '_'); 
+import { ref, onValue } from "firebase/database";
+import { auth, rtdb as db } from "../lib/firebase";
+import { ShieldCheck, Sparkles, User, Award, ChevronDown } from 'lucide-react';
 
 export default function Header() {
-  const [user, setUser] = useState(null);
-  const [userData, setUserData] = useState({
-    status: 'เพื่อน',
-    fullName: 'กำลังโหลด...',
-    renewDate: ''
-  });
+  const [userData, setUserData] = useState({ fullName: "ผู้ใช้งาน", status: "สมาชิกทั่วไป" });
 
-  // 2. การจัดการสิทธิ์ (Rule 3)
   useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (err) {
-        console.error("Auth Error:", err);
-      }
-    };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, setUser);
-    return () => unsubscribe();
+    const user = auth.currentUser;
+    if (!user) return;
+
+    const userRef = ref(db, `users/${user.uid}/profile`);
+    return onValue(userRef, (snapshot) => {
+      if (snapshot.exists()) setUserData(snapshot.val());
+    });
   }, []);
 
-  // 3. ดึงข้อมูลสถานะและแผนสมาชิก (Rule 1)
-  useEffect(() => {
-    if (!user) return;
-    
-    // ดึงข้อมูลจาก Public Data ตามที่เราตั้งค่าไว้ใน MembershipTab
-    const userRef = ref(db, `artifacts/${appId}/public/data/users/${user.uid}`);
-    const unsubscribe = onValue(userRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        setUserData({
-          status: data.status || 'เพื่อน',
-          fullName: data.fullName || (user.displayName || "คุณผู้ใช้งาน"),
-          renewDate: data.renewDate || "" // เช่น "หมดอายุ 31/01/2569"
-        });
-      }
-    });
-
-    return () => unsubscribe();
-  }, [user]);
-
-  // คำทักทายตามช่วงเวลา
   const getGreeting = () => {
     const hour = new Date().getHours();
-    if (hour < 12) return "สวัสดีตอนเช้านะครับ";
-    if (hour < 17) return "บ่ายนี้สู้ๆ นะครับ";
-    return "เย็นนี้พักผ่อนบ้างนะครับ";
+    if (hour < 12) return "อรุณสวัสดิ์จ๊ะ";
+    if (hour < 18) return "สวัสดีตอนบ่ายจ๊ะ";
+    return "สวัสดียามค่ำคืนจ๊ะ";
   };
 
   return (
-    <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-slate-100 shadow-sm">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-4">
-        
-        {/* ส่วนซ้าย: โลโก้และชื่อ */}
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-indigo-700 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-100 shrink-0">
-             <Sparkles size={24} />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="font-black text-slate-800 text-lg leading-tight truncate">พี่พร้อม</h1>
-              <div className="hidden sm:flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-full text-[9px] font-bold border border-emerald-100">
-                <ShieldCheck size={10} /> Online
-              </div>
-            </div>
-            <p className="text-[11px] text-slate-400 font-bold truncate italic">{getGreeting()} คุณ{userData.fullName} 👋</p>
+    <header className="sticky top-0 z-[90] bg-white/80 backdrop-blur-xl border-b border-slate-100 px-6 py-4">
+      <div className="max-w-5xl mx-auto flex justify-between items-center">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-100 italic font-black text-xl">P</div>
+          <div className="text-left">
+            <h1 className="text-sm font-black text-slate-900 tracking-tight">P-PROMPT</h1>
+            <p className="text-[10px] text-slate-400 font-bold italic">{getGreeting()} คุณ{userData.fullName} 👋</p>
           </div>
         </div>
-
-        {/* ส่วนขวา: สถานะสมาชิก */}
-        <div className="flex items-center gap-3 shrink-0">
-          <div className="text-right hidden xs:block">
-            <div className="flex items-center justify-end gap-1.5 mb-0.5">
-              <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest">สถานะ</span>
-              <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-tighter shadow-sm border ${
-                userData.status === 'เพื่อนผู้มีพระคุณ' 
-                ? 'bg-indigo-600 text-white border-indigo-500' 
-                : userData.status === 'คนคุย'
-                ? 'bg-amber-100 text-amber-700 border-amber-200'
-                : 'bg-slate-100 text-slate-500 border-slate-200'
-              }`}>
-                {userData.status}
-              </span>
-            </div>
-            {userData.renewDate && (
-              <p className="text-[9px] text-slate-300 font-bold italic">{userData.renewDate}</p>
-            )}
+        <div className="flex items-center gap-3">
+          <div className="hidden xs:block text-right">
+            <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase border ${userData.status === 'VIP' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'}`}>
+              {userData.status}
+            </span>
           </div>
-          
-          {/* Avatar จำลอง */}
-          <div className="w-10 h-10 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-300 hover:text-indigo-500 transition-colors cursor-pointer shadow-inner">
-            <User size={20} />
-          </div>
+          <div className="w-10 h-10 rounded-full bg-slate-100 border-2 border-white shadow-sm flex items-center justify-center text-slate-400"><User size={20}/></div>
         </div>
       </div>
     </header>
