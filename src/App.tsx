@@ -320,11 +320,7 @@ const WorkTab = ({ user, onOpenModal }: { user: User; onOpenModal: (m: AddMode) 
   );
 
   const handleAiDraftProject = async (pId: string, pName: string) => {
-    if (!geminiApiKey) {
-      alert("ยังไม่ได้ตั้งค่า Gemini API Key จ๊ะ (VITE_GEMINI_API_KEY)");
-      return;
-    }
-    setIsAiDrafting(pId);
+        setIsAiDrafting(pId);
     const prompt =
       `ช่วยร่างกิจกรรม (Task) และกิจกรรมย่อย (Sub-task) สำหรับโครงการชื่อ "${pName}" ` +
       `ขอ 3-4 กิจกรรมหลัก แต่ละกิจกรรมมี 2 กิจกรรมย่อย ตอบเป็น JSON เท่านั้น: ` +
@@ -613,11 +609,7 @@ const FinanceTab = ({ user, onOpenModal }: { user: User; onOpenModal: (m: AddMod
   const totalDebtMonthly = useMemo(() => debtItems.reduce((s, i) => s + Number(i.monthlyPay || 0), 0), [debtItems]);
 
   const handleAiFinance = async () => {
-    if (!geminiApiKey) {
-      alert("ยังไม่ได้ตั้งค่า Gemini API Key จ๊ะ (VITE_GEMINI_API_KEY)");
-      return;
-    }
-    setIsProcessing(true);
+        setIsProcessing(true);
     const prompt =
       `ในฐานะที่ปรึกษาการเงินชื่อ "พี่พร้อม" ช่วยวิเคราะห์กลยุทธ์การเงินจากข้อมูล: ` +
       `รายได้ประจำ ฿${totalReg}, รายได้พิเศษ ฿${totalSpec}, ภาระหนี้ผ่อนต่อเดือน ฿${totalDebtMonthly}. ` +
@@ -853,9 +845,7 @@ const HealthTab = ({ user, onOpenModal }: { user: User; onOpenModal: (m: AddMode
 
   useEffect(() => {
     const checkWeeklySummary = async () => {
-      if (!geminiApiKey) return;
-      const now = new Date();
-      if (now.getDay() === 0 && now.getHours() >= 19 && healthEntries.length > 0) {
+        if (now.getDay() === 0 && now.getHours() >= 19 && healthEntries.length > 0) {
         const storageKey = `${appId}:sunday_sum:${user.uid}:${now.toLocaleDateString()}`;
         if (!localStorage.getItem(storageKey)) {
           const stories = healthEntries.slice(0, 7).map((e) => e.story).join(" | ");
@@ -955,28 +945,34 @@ export default function App() {
   const [addOpen, setAddOpen] = useState(false);
   const [addMode, setAddMode] = useState<AddMode>("นัดหมาย");
   const [isSaving, setIsSaving] = useState(false);
-
+  const [authError, setAuthError] = useState(null);
   // ✅ AUTH: อยู่ที่ App ที่เดียว
+  // ✅ แทนที่ด้วยโค้ดนี้
   useEffect(() => {
     const initAuth = async () => {
       try {
-        const token = (globalThis as any).__initial_auth_token;
-        if (typeof token !== "undefined" && token) await signInWithCustomToken(auth, token);
-        else await signInAnonymously(auth);
-      } catch {
-        // fallback
-        await signInAnonymously(auth);
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (error) {
+        console.error('Auth Error:', error);
+        setAuthError(error.message);
+        setLoading(false);
       }
     };
-
+  
     initAuth();
-
-    return onAuthStateChanged(auth, (u) => {
+  
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
       if (u) {
         setUser(u);
         setLoading(false);
       }
     });
+  
+    return () => unsubscribe();
   }, []);
 
   const openModal = (mode: AddMode) => {
@@ -1074,7 +1070,32 @@ export default function App() {
 
     setIsSaving(false);
   };
-
+  if (authError) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-[#FDFCFB] p-4">
+        <div className="max-w-md w-full bg-white rounded-3xl p-8 shadow-xl border border-rose-100 text-center">
+          <IntegratedStyles />
+          <h2 className="text-xl font-black text-slate-800 mb-4">⚠️ ระบบขัดข้องจ๊ะ</h2>
+          <p className="text-sm text-slate-600 mb-6">{authError}</p>
+          <div className="bg-slate-50 rounded-2xl p-4 text-xs text-slate-500 text-left mb-4">
+            <p className="font-bold mb-2">💡 วิธีแก้ไข:</p>
+            <ol className="list-decimal list-inside space-y-1">
+              <li>เปิด Anonymous Authentication ใน Firebase Console</li>
+              <li>ไปที่: console.firebase.google.com/project/p-prompt/authentication</li>
+              <li>เปิด "Anonymous" provider</li>
+              <li>Refresh หน้านี้ (F5)</li>
+            </ol>
+          </div>
+          <button
+            onClick={() => window.location.reload()}
+            className="w-full px-6 py-3 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all"
+          >
+            ลองใหม่อีกครั้ง
+          </button>
+        </div>
+      </div>
+    );
+  }
   if (loading || !user) {
     return (
       <div className="h-screen flex items-center justify-center bg-[#FDFCFB]">
