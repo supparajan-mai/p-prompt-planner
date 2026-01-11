@@ -1,26 +1,25 @@
-// src/lib/firebase.ts
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
-import { getDatabase } from 'firebase/database';
-import { getStorage } from 'firebase/storage';
+export async function callOpenAI(prompt: string) {
+  const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
+  if (!apiKey) return "ไม่พบคีย์ AI จ๊ะ";
 
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID
-};
-
-// Singleton pattern ป้องกันการ Initialize ซ้ำ
-const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-
-export const auth = getAuth(app);
-export const store = getFirestore(app);
-export const rtdb = getDatabase(app);
-export const storage = getStorage(app);
-
-export default app;
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: "คุณคือพี่พร้อม ผู้ช่วยที่อบอุ่น" },
+          { role: "user", content: prompt }
+        ]
+      })
+    });
+    const result = await response.json();
+    return result.choices[0].message.content;
+  } catch (error) {
+    return "พี่พร้อมขออภัย ระบบขัดข้องจ๊ะ";
+  }
+}

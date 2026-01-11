@@ -1,11 +1,12 @@
-// src/app/MainApp.tsx
 import React, { useState, useEffect } from "react";
 import { onAuthStateChanged } from "firebase/auth";
-import { auth } from "../lib/firebase"; // ดึงจาก lib/firebase.ts
+import { auth } from "../lib/firebase"; // ดึงจาก lib
+
+// --- Import UI Components จากโฟลเดอร์ app ---
 import Header from "./Header";
 import BottomNav from "./BottomNav";
 
-// Import หน้า Tab จากโฟลเดอร์ tabs
+// --- Import หน้า Tabs จากโฟลเดอร์ tabs ---
 import WorkTab from "../tabs/WorkTab"; 
 import MemoTab from "../tabs/MemoTab";
 import FinanceTab from "../tabs/FinanceTab";
@@ -20,9 +21,9 @@ export default function MainApp() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#FDFCFB] pb-32">
+    <div className="min-h-screen bg-[#FDFCFB] pb-32 text-left">
       <Header />
-      <main className="max-w-5xl mx-auto px-6 pt-8 text-left">
+      <main className="max-w-5xl mx-auto px-6 pt-8">
         {/* สลับหน้าตาม Tab โดยดึงไฟล์จากโฟลเดอร์ tabs จ๊ะ */}
         {tab === "work" && <WorkTab />}
         {tab === "memo" && <MemoTab />}
