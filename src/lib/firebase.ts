@@ -2,24 +2,26 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getFunctions } from 'firebase/functions';
+import { getStorage } from 'firebase/storage';
+import { getDatabase } from 'firebase/database';
 
-// Firebase configuration using Vite environment variables
-// ต้องตั้งค่าในไฟล์ .env เช่น VITE_FIREBASE_API_KEY=...
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET, // ต้องเป็น p-prompt.firebasestorage.app
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL, // URL ของ Realtime Database
 };
 
-// Initialize Firebase (Singleton pattern)
+// Singleton pattern ป้องกันการ Initialize ซ้ำ
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
-// Export instances for use across the app
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+export const db = getFirestore(app);           // สำหรับ Firestore
+export const rtdb = getDatabase(app);        // สำหรับ Realtime DB (เชื่อม Sheet)
+export const storage = getStorage(app);      // สำหรับเก็บสลิปโอนเงิน
 export const functions = getFunctions(app);
 
 export default app;
