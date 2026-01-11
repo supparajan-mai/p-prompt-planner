@@ -14,21 +14,24 @@ import {
   Loader2, 
   ShieldCheck, 
   Sparkles, 
-  LogOut
+  LogOut,
+  AlertTriangle
 } from "lucide-react";
 
 /**
  * --- 1. การตั้งค่าระบบ (Configuration) ---
- * พี่พร้อมปรับให้ใช้ค่าจากสภาพแวดล้อมจำลองเพื่อให้แสดงผลใน Preview ได้จ๊ะ
- * เมื่อคุณนำไปใช้ในโปรเจกต์ Vite จริง ให้เปลี่ยนกลับไปใช้ import.meta.env ตามความเหมาะสมนะจ๊ะ
+ * ใช้ค่าจาก Environment Variables พร้อม fallback values
  */
 const firebaseConfig = typeof __firebase_config !== 'undefined' 
   ? JSON.parse(__firebase_config) 
   : {
-      apiKey: "", 
-      authDomain: "p-prompt.firebaseapp.com",
-      projectId: "p-prompt",
-      appId: "1:123456789:web:abcdef"
+      apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyDKxHVKU9F36vD8_qgX00UfZNPCMiknXqM",
+      authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "p-prompt.firebaseapp.com",
+      databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || "https://p-prompt-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "p-prompt",
+      storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "p-prompt.firebasestorage.app",
+      messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "566289872852",
+      appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:566289872852:web:4ea11ccbe1c619fded0841"
     };
 
 const app = initializeApp(firebaseConfig);
@@ -45,6 +48,7 @@ export default function AuthGate({ children }) {
       try {
         await getRedirectResult(auth);
       } catch (e) {
+        console.error("Redirect error:", e);
         setAuthError("การเข้าสู่ระบบขัดข้องนิดหน่อยจ๊ะ ลองใหม่อีกครั้งนะจ๊ะ");
       }
     };
@@ -67,6 +71,7 @@ export default function AuthGate({ children }) {
       // ลองใช้หน้าต่าง Popup ก่อนจ๊ะ
       await signInWithPopup(auth, provider);
     } catch (e) {
+      console.error("Sign in error:", e);
       const code = String(e?.code || "");
       // หาก Popup ถูกบล็อกหรือมีปัญหา ให้ใช้การ Redirect แทนจ๊ะ
       if (

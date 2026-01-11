@@ -16,17 +16,15 @@ import {
 } from "lucide-react";
 
 // --- 1. การตั้งค่าระบบ (Configuration) ---
-const firebaseConfig = typeof __firebase_config !== 'undefined' 
-  ? JSON.parse(__firebase_config) 
-  : {
-      apiKey: "", 
-      authDomain: "p-prompt.firebaseapp.com",
-      databaseURL: "https://p-prompt-default-rtdb.asia-southeast1.firebasedatabase.app",
-      projectId: "p-prompt",
-      storageBucket: "p-prompt.firebasestorage.app",
-      messagingSenderId: "",
-      appId: ""
-    };
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyDKxHVKU9F36vD8_qgX00UfZNPCMiknXqM",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "p-prompt.firebaseapp.com",
+  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || "https://p-prompt-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "p-prompt",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "p-prompt.firebasestorage.app",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "566289872852",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:566289872852:web:4ea11ccbe1c619fded0841"
+};
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -37,8 +35,8 @@ const db = getDatabase(app);
 const rawAppId = typeof __app_id !== 'undefined' ? __app_id : 'p-prompt-planner';
 const appId = rawAppId.replace(/[.#$[\]]/g, '_'); // เปลี่ยนตัวอักษรต้องห้ามเป็น _
 
-// API Key สำหรับ Gemini (ปล่อยว่างไว้)
-const apiKey = ""; 
+// API Key สำหรับ Gemini
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ""; 
 
 const MOODS = [
   { id: 5, emoji: "🤩", name: "ตื่นเต้น", color: "bg-orange-100 text-orange-600" },
@@ -117,22 +115,25 @@ export default function App() {
     setIsAiAnalyzing(true);
     let aiResponseText = "วันนี้คุณทำดีที่สุดแล้วนะจ๊ะ พี่พร้อมอยู่ข้างๆ เสมอจ๊ะ";
     
-    const prompt = `ผู้ใช้งานเล่าว่า: "${story}" และเลือกอารมณ์ระดับ ${moodLevel}/5. ในฐานะ "พี่พร้อม" ที่ปรึกษาที่อบอุ่นและเป็นกลาง โปรดให้คำตอบสั้นๆ (3-4 ประโยค) ที่แสดงความเห็นใจและให้กำลังใจเขาเป็นภาษาไทย ใช้สรรพนามเรียกผู้ใช้งานว่า "คุณ" และแทนตัวเองว่า "พี่พร้อม" นะจ๊ะ`;
-    
-    try {
-        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-        });
-        const result = await res.json();
-        // ตรวจสอบให้แน่ใจว่าได้ค่าเป็น String (Fix Error: Objects are not valid as a React child)
-        const extractedText = result.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (typeof extractedText === 'string') {
-          aiResponseText = extractedText;
-        }
-    } catch (e) { 
-        console.error("AI Error:", e); 
+    // เช็คว่ามี Gemini API Key หรือไม่
+    if (apiKey) {
+      const prompt = `ผู้ใช้งานเล่าว่า: "${story}" และเลือกอารมณ์ระดับ ${moodLevel}/5. ในฐานะ "พี่พร้อม" ที่ปรึกษาที่อบอุ่นและเป็นกลาง โปรดให้คำตอบสั้นๆ (3-4 ประโยค) ที่แสดงความเห็นใจและให้กำลังใจเขาเป็นภาษาไทย ใช้สรรพนามเรียกผู้ใช้งานว่า "คุณ" และแทนตัวเองว่า "พี่พร้อม" นะจ๊ะ`;
+      
+      try {
+          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+          });
+          const result = await res.json();
+          // ตรวจสอบให้แน่ใจว่าได้ค่าเป็น String (Fix Error: Objects are not valid as a React child)
+          const extractedText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (typeof extractedText === 'string') {
+            aiResponseText = extractedText;
+          }
+      } catch (e) { 
+          console.error("AI Error:", e); 
+      }
     }
 
     const id = Date.now().toString();

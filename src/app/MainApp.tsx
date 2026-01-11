@@ -1,664 +1,282 @@
-import { useMemo, useState, useEffect } from "react";
-import type { TabId, Appointment, Task, Project, NoteItem, FinanceItem, HealthEntry } from "../types";
-import Header from "./Header";
-import BottomNav from "./BottomNav";
-import { APP_ID, loadLS, saveLS, todayYMD, uid } from "./storage";
-import { Input, Modal, Pill, Textarea } from "./ui";
+import React, { useMemo, useState, useEffect } from "react";
+import { 
+  getDatabase, ref, set, onValue, push, remove as dbRemove 
+} from "firebase/database";
+import { 
+  getAuth, 
+  signInAnonymously, 
+  onAuthStateChanged,
+  signInWithCustomToken
+} from "firebase/auth";
+import { initializeApp } from "firebase/app";
+import { 
+  getFirestore, doc, getDoc, setDoc, onSnapshot, updateDoc 
+} from 'firebase/firestore';
+import { 
+  X, Plus, Check, Loader2, Heart, Smile, Star, Sparkles, 
+  Send, Trash2, ShieldCheck, AlertTriangle, History, 
+  MessageCircle, Coffee, Briefcase, Book, Wallet, 
+  Settings, User, ChevronRight, LogIn, Award, FileText, Lock, Scale, Gift, 
+  Laugh, Zap, IceCream, Ghost, Rocket, RefreshCw, UserCircle
+} from "lucide-react";
 
-import WorkTab from "../tabs/WorkTab";
-import MemoTab from "../tabs/MemoTab";
-import FinanceTab from "../tabs/FinanceTab";
-import HealthTab from "../tabs/HealthTab";
-
-/** โหมดเพิ่มรายการรวม */
-type AddMode = "นัด" | "งาน" | "โครงการ" | "โน้ต" | "บัญชี" | "สุขภาพ";
-
-export default function MainApp() {
-  const [tab, setTab] = useState<TabId>("work");
-
-  // ---- Global data stores (LS) ----
-  const [appointments, setAppointments] = useState<Appointment[]>(() => loadLS(`${APP_ID}:appointments`, []));
-  const [tasks, setTasks] = useState<Task[]>(() => loadLS(`${APP_ID}:tasks`, []));
-  const [projects, setProjects] = useState<Project[]>(() => loadLS(`${APP_ID}:projects`, []));
-  const [notes, setNotes] = useState<NoteItem[]>(() => loadLS(`${APP_ID}:notes`, []));
-  const [finance, setFinance] = useState<FinanceItem[]>(() => loadLS(`${APP_ID}:finance`, []));
-  const [health, setHealth] = useState<HealthEntry[]>(() => loadLS(`${APP_ID}:health`, []));
-
-  useEffect(() => saveLS(`${APP_ID}:appointments`, appointments), [appointments]);
-  useEffect(() => saveLS(`${APP_ID}:tasks`, tasks), [tasks]);
-  useEffect(() => saveLS(`${APP_ID}:projects`, projects), [projects]);
-  useEffect(() => saveLS(`${APP_ID}:notes`, notes), [notes]);
-  useEffect(() => saveLS(`${APP_ID}:finance`, finance), [finance]);
-  useEffect(() => saveLS(`${APP_ID}:health`, health), [health]);
-
-  // ---- Add Modal ----
-  const [addOpen, setAddOpen] = useState(false);
-  const [addMode, setAddMode] = useState<AddMode>("นัด");
-
-  // เลือกแท็บอัตโนมัติ ตอนกด + (ให้ประสบการณ์ “เพิ่มจากหน้าที่อยู่”)
-  useEffect(() => {
-    if (!addOpen) return;
-    const mapping: Record<TabId, AddMode> = {
-      work: "นัด",
-      memo: "โน้ต",
-      finance: "บัญชี",
-      health: "สุขภาพ",
+// --- 1. การตั้งค่า Firebase (Configuration) ---
+const firebaseConfig = typeof __firebase_config !== 'undefined' 
+  ? JSON.parse(__firebase_config) 
+  : {
+      apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyDKxHVKU9F36vD8_qgX00UfZNPCMiknXqM",
+      authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "p-prompt.firebaseapp.com",
+      databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || "https://p-prompt-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "p-prompt",
+      storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "p-prompt.firebasestorage.app",
+      messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "566289872852",
+      appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:566289872852:web:4ea11ccbe1c619fded0841"
     };
-    setAddMode(mapping[tab]);
-  }, [addOpen, tab]);
 
-  // ---- Work: appointment form ----
-  const [apptTitle, setApptTitle] = useState("");
-  const [apptDate, setApptDate] = useState(todayYMD());
-  const [apptStart, setApptStart] = useState("09:00");
-  const [apptEnd, setApptEnd] = useState("10:00");
-  const [apptLocation, setApptLocation] = useState("");
-  const [apptNote, setApptNote] = useState("");
-  const [apptAddToGCal, setApptAddToGCal] = useState(true);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getDatabase(app);
+const store = getFirestore(app);
 
-  // ---- Work: task form ----
-  const [taskTitle, setTaskTitle] = useState("");
-  const [taskDue, setTaskDue] = useState(todayYMD());
-  const [taskPriority, setTaskPriority] = useState<Task["priority"]>("กลาง");
+// จัดการ appId ให้ปลอดภัยจากเครื่องหมายพิเศษ (Rule 1)
+const rawAppId = typeof __app_id !== 'undefined' ? __app_id : 'p-prompt-planner';
+const appId = rawAppId.replace(/[.#$[\]]/g, '_');
 
-  // ---- Work: project form ----
-  const [projName, setProjName] = useState("");
-  const [projBudget, setProjBudget] = useState<number>(0);
-  const [projTarget, setProjTarget] = useState("");
-  const [projQuarters, setProjQuarters] = useState<Project["quarters"]>(["Q1"]);
-  const [projTaskDraft, setProjTaskDraft] = useState("");
-  const [projTasksDraft, setProjTasksDraft] = useState<Project["tasks"]>([]);
+// การตั้งค่า OpenChat API (สำหรับการใช้งานจริง)
+const OPENCHAT_CONFIG = {
+  apiKey: "", 
+  baseUrl: "https://api.openai.com/v1",
+  model: "gpt-3.5-turbo"
+};
 
-  // ---- Memo form ----
-  const [noteTitle, setNoteTitle] = useState("");
-  const [noteContent, setNoteContent] = useState("");
-  const [noteColor, setNoteColor] = useState("orange-100");
+// --- ส่วนประกอบย่อย (Sub-components) ---
 
-  // ---- Finance form ----
-  const [finDate, setFinDate] = useState(todayYMD());
-  const [finTitle, setFinTitle] = useState("");
-  const [finType, setFinType] = useState<FinanceItem["type"]>("รายจ่าย");
-  const [finAmount, setFinAmount] = useState<number>(0);
-  const [finCategory, setFinCategory] = useState("");
-  const [finNecessity, setFinNecessity] = useState<FinanceItem["necessity"]>("จำเป็น");
-  const [finNote, setFinNote] = useState("");
+/**
+ * Header: ส่วนหัวของแอปที่ดึงข้อมูลชื่อและสถานะสมาชิกจ๊ะ
+ */
+const Header = ({ user }) => {
+  const [userData, setUserData] = useState({ status: 'เพื่อน', fullName: '...' });
 
-  // ---- Health form (ตรงกับ HealthTab: moodLevel 1-5) ----
-  const [hDate, setHDate] = useState(todayYMD());
-  const [hSteps, setHSteps] = useState<number>(0);
-  const [hWater, setHWater] = useState<number>(0);
-  const [hTea, setHTea] = useState<number>(0);
-  const [hSleep, setHSleep] = useState<number>(0);
-  const [hMood, setHMood] = useState<1 | 2 | 3 | 4 | 5>(3);
-  const [hDetail, setHDetail] = useState("");
-
-  const resetForms = () => {
-    setApptTitle("");
-    setApptDate(todayYMD());
-    setApptStart("09:00");
-    setApptEnd("10:00");
-    setApptLocation("");
-    setApptNote("");
-    setApptAddToGCal(true);
-
-    setTaskTitle("");
-    setTaskDue(todayYMD());
-    setTaskPriority("กลาง");
-
-    setProjName("");
-    setProjBudget(0);
-    setProjTarget("");
-    setProjQuarters(["Q1"]);
-    setProjTaskDraft("");
-    setProjTasksDraft([]);
-
-    setNoteTitle("");
-    setNoteContent("");
-    setNoteColor("orange-100");
-
-    setFinDate(todayYMD());
-    setFinTitle("");
-    setFinType("รายจ่าย");
-    setFinAmount(0);
-    setFinCategory("");
-    setFinNecessity("จำเป็น");
-    setFinNote("");
-
-    setHDate(todayYMD());
-    setHSteps(0);
-    setHWater(0);
-    setHTea(0);
-    setHSleep(0);
-    setHMood(3);
-    setHDetail("");
-  };
-
-  const buildGCalTemplateUrl = (p: {
-    title: string;
-    date: string;
-    startTime: string;
-    endTime: string;
-    details?: string;
-    location?: string;
-  }) => {
-    // YYYY-MM-DD + HH:mm -> YYYYMMDDTHHMM00
-    const fmt = (d: string, t: string) => `${d.replaceAll("-", "")}T${t.replaceAll(":", "")}00`;
-    const start = fmt(p.date, p.startTime);
-    const end = fmt(p.date, p.endTime);
-    const url = new URL("https://calendar.google.com/calendar/render");
-    url.searchParams.set("action", "TEMPLATE");
-    url.searchParams.set("text", p.title);
-    url.searchParams.set("dates", `${start}/${end}`);
-    if (p.details) url.searchParams.set("details", p.details);
-    if (p.location) url.searchParams.set("location", p.location);
-    return url.toString();
-  };
-
-  const saveAdd = () => {
-    // 1) นัด
-    if (addMode === "นัด") {
-      if (!apptTitle.trim()) return alert("กรุณากรอกหัวข้อนัด");
-      const item: Appointment = {
-        id: uid("appt"),
-        title: apptTitle.trim(),
-        date: apptDate,
-        startTime: apptStart,
-        endTime: apptEnd,
-        location: apptLocation.trim(),
-        note: apptNote.trim(),
-        createdAt: Date.now(),
-      };
-      setAppointments((p) => [item, ...p]);
-
-      if (apptAddToGCal) {
-        const url = buildGCalTemplateUrl({
-          title: item.title,
-          date: item.date,
-          startTime: item.startTime,
-          endTime: item.endTime,
-          details: item.note || "สร้างจากพี่พร้อม",
-          location: item.location,
-        });
-        window.open(url, "_blank", "noopener,noreferrer");
-      }
-
-      setAddOpen(false);
-      resetForms();
-      return;
-    }
-
-    // 2) งาน
-    if (addMode === "งาน") {
-      if (!taskTitle.trim()) return alert("กรุณากรอกชื่องาน");
-      const item: Task = {
-        id: uid("task"),
-        title: taskTitle.trim(),
-        dueDate: taskDue,
-        priority: taskPriority,
-        done: false,
-        createdAt: Date.now(),
-      };
-      setTasks((p) => [item, ...p]);
-      setAddOpen(false);
-      resetForms();
-      return;
-    }
-
-    // 3) โครงการ
-    if (addMode === "โครงการ") {
-      if (!projName.trim()) return alert("กรุณากรอกชื่อโครงการ");
-      const item: Project = {
-        id: uid("proj"),
-        name: projName.trim(),
-        budget: Number(projBudget || 0),
-        quarters: projQuarters.length ? projQuarters : ["Q1"],
-        target: projTarget.trim(),
-        tasks: projTasksDraft,
-        createdAt: Date.now(),
-      };
-      setProjects((p) => [item, ...p]);
-      setAddOpen(false);
-      resetForms();
-      return;
-    }
-
-    // 4) โน้ต
-    if (addMode === "โน้ต") {
-      if (!noteTitle.trim()) return alert("กรุณาใส่หัวข้อโน้ต");
-      const item: NoteItem = {
-        id: uid("note"),
-        title: noteTitle.trim(),
-        content: noteContent.trim(),
-        color: noteColor,
-        createdAt: Date.now(),
-      };
-      setNotes((p) => [item, ...p]);
-      setAddOpen(false);
-      resetForms();
-      return;
-    }
-
-    // 5) บัญชี
-    if (addMode === "บัญชี") {
-      if (!finTitle.trim()) return alert("กรุณาใส่รายการ");
-      if (!Number.isFinite(Number(finAmount))) return alert("จำนวนเงินไม่ถูกต้อง");
-      const item: FinanceItem = {
-        id: uid("fin"),
-        date: finDate,
-        title: finTitle.trim(),
-        type: finType,
-        amount: Number(finAmount || 0),
-        category: finCategory.trim(),
-        necessity: finNecessity,
-        note: finNote.trim(),
-        createdAt: Date.now(),
-      };
-      setFinance((p) => [item, ...p]);
-      setAddOpen(false);
-      resetForms();
-      return;
-    }
-
-    // 6) สุขภาพ
-    if (addMode === "สุขภาพ") {
-      const it: HealthEntry = {
-        id: uid("health"),
-        date: hDate,
-        steps: Number(hSteps || 0),
-        waterGlasses: Number(hWater || 0),
-        teaCoffeeGlasses: Number(hTea || 0),
-        sleepHours: Number(hSleep || 0),
-        moodLevel: hMood,
-        detail: hDetail.trim(),
-        createdAt: Date.now(),
-      };
-
-      // วันซ้ำ -> overwrite
-      setHealth((prev) => {
-        const idx = prev.findIndex((x) => x.date === hDate);
-        if (idx >= 0) {
-          const next = prev.slice();
-          next[idx] = { ...prev[idx], ...it, id: prev[idx].id };
-          return next;
-        }
-        return [it, ...prev];
+  useEffect(() => {
+    if (!user) return;
+    const userRef = ref(db, `artifacts/${appId}/public/data/users/${user.uid}`);
+    return onValue(userRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) setUserData({ 
+        status: data.status || 'เพื่อน', 
+        fullName: data.fullName || user.displayName || "คุณ" 
       });
-
-      setAddOpen(false);
-      resetForms();
-      return;
-    }
-  };
-
-  // ---- render current tab ----
-  const content = useMemo(() => {
-    switch (tab) {
-      case "work":
-        return <WorkTab />;
-      case "memo":
-        return <MemoTab />;
-      case "finance":
-        return <FinanceTab />;
-      case "health":
-        return <HealthTab />;
-      default:
-        return <WorkTab />;
-    }
-  }, [tab]);
+    });
+  }, [user]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Header />
-
-      <div className="mx-auto max-w-xl px-4 pt-4 pb-28">{content}</div>
-
-      {/* ✅ แบบ B: กด + กลาง เปิด modal เพิ่มรายการ */}
-      <BottomNav tab={tab} setTab={setTab} onAdd={() => setAddOpen(true)} />
-
-      {/* Add Modal รวม */}
-      <Modal
-        open={addOpen}
-        onClose={() => {
-          setAddOpen(false);
-          resetForms();
-        }}
-        title="เพิ่มรายการใหม่"
-        wide
-      >
-        <div className="flex flex-wrap gap-2 mb-4">
-          {(["นัด", "งาน", "โครงการ", "โน้ต", "บัญชี", "สุขภาพ"] as AddMode[]).map((m) => (
-            <Pill key={m} active={addMode === m} onClick={() => setAddMode(m)}>
-              {m}
-            </Pill>
-          ))}
+    <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-slate-100 p-4 shadow-sm">
+      <div className="max-w-4xl mx-auto flex justify-between items-center">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg"><Sparkles size={20}/></div>
+          <div>
+            <h1 className="font-black text-slate-800 text-base">พี่พร้อม</h1>
+            <p className="text-[10px] text-slate-400 font-bold italic">สวัสดีจ๊ะคุณ {userData.fullName}</p>
+          </div>
         </div>
+        <div className="px-3 py-1 bg-slate-100 rounded-full text-[9px] font-black uppercase text-slate-500 border border-slate-200">
+          สถานะ: {userData.status}
+        </div>
+      </div>
+    </header>
+  );
+};
 
-        {/* -------- นัด -------- */}
-        {addMode === "นัด" ? (
-          <div className="space-y-3">
-            <div>
-              <div className="text-xs text-gray-600 mb-1">หัวข้อนัด</div>
-              <Input value={apptTitle} onChange={(e) => setApptTitle(e.target.value)} placeholder="เช่น ประชุม / นัดหมาย" />
-            </div>
+/**
+ * BottomNav: แถบเมนูด้านล่างจ๊ะ
+ */
+const BottomNav = ({ tab, setTab, onAdd }) => (
+  <nav className="fixed bottom-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-t border-slate-100 pb-safe shadow-[0_-10px_30px_rgba(0,0,0,0.03)]">
+    <div className="max-w-4xl mx-auto grid grid-cols-5 h-20 items-center">
+      <button onClick={() => setTab("work")} className={`flex flex-col items-center gap-1 ${tab === "work" ? "text-indigo-600" : "text-slate-300"}`}>
+        <Briefcase size={20} /><span className="text-[9px] font-black uppercase">งาน</span>
+      </button>
+      <button onClick={() => setTab("memo")} className={`flex flex-col items-center gap-1 ${tab === "memo" ? "text-indigo-600" : "text-slate-300"}`}>
+        <Book size={20} /><span className="text-[9px] font-black uppercase">โน้ต</span>
+      </button>
+      <div className="flex justify-center">
+        <button onClick={onAdd} className="w-14 h-14 bg-slate-900 text-white rounded-3xl flex items-center justify-center shadow-2xl -translate-y-4 active:scale-90 transition-transform"><Plus size={28}/></button>
+      </div>
+      <button onClick={() => setTab("finance")} className={`flex flex-col items-center gap-1 ${tab === "finance" ? "text-indigo-600" : "text-slate-300"}`}>
+        <Wallet size={20} /><span className="text-[9px] font-black uppercase">เงิน</span>
+      </button>
+      <button onClick={() => setTab("health")} className={`flex flex-col items-center gap-1 ${tab === "health" ? "text-indigo-600" : "text-slate-300"}`}>
+        <Heart size={20} /><span className="text-[9px] font-black uppercase">ดูแลใจ</span>
+      </button>
+    </div>
+  </nav>
+);
 
-            <div className="grid sm:grid-cols-3 gap-2">
-              <div>
-                <div className="text-xs text-gray-600 mb-1">วันที่</div>
-                <Input type="date" value={apptDate} onChange={(e) => setApptDate(e.target.value)} />
-              </div>
-              <div>
-                <div className="text-xs text-gray-600 mb-1">เริ่ม</div>
-                <Input type="time" value={apptStart} onChange={(e) => setApptStart(e.target.value)} />
-              </div>
-              <div>
-                <div className="text-xs text-gray-600 mb-1">สิ้นสุด</div>
-                <Input type="time" value={apptEnd} onChange={(e) => setApptEnd(e.target.value)} />
-              </div>
-            </div>
+/**
+ * Tabs: คอมโพเนนต์จำลองหน้า Tab ต่างๆ จ๊ะ
+ */
+const WorkTab = () => <div className="p-10 text-center"><Loader2 className="animate-spin mx-auto mb-4 text-indigo-600"/><p className="text-sm font-bold text-slate-400 italic">หน้างานกำลังปรับปรุงจ๊ะ...</p></div>;
+const MemoTab = () => <div className="p-10 text-center"><Book className="mx-auto mb-4 text-indigo-200" size={48}/><p className="text-sm font-bold text-slate-400 italic">หน้าโน้ตกำลังเตรียมข้อมูลจ๊ะ...</p></div>;
+const FinanceTab = () => <div className="p-10 text-center"><Wallet className="mx-auto mb-4 text-emerald-200" size={48}/><p className="text-sm font-bold text-slate-400 italic">หน้าการเงินกำลังคิดเลขจ๊ะ...</p></div>;
 
-            <div>
-              <div className="text-xs text-gray-600 mb-1">สถานที่</div>
-              <Input value={apptLocation} onChange={(e) => setApptLocation(e.target.value)} placeholder="เช่น ห้องประชุม/ออนไลน์" />
-            </div>
+/**
+ * HealthTab: หน้าดูแลใจแบบประมวลผลผ่าน AI จ๊ะ
+ */
+const HealthTab = ({ user }) => {
+  const [healthEntries, setHealthEntries] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-            <div>
-              <div className="text-xs text-gray-600 mb-1">รายละเอียด</div>
-              <Textarea rows={3} value={apptNote} onChange={(e) => setApptNote(e.target.value)} placeholder="โน้ตเพิ่มเติม (ถ้ามี)" />
-            </div>
+  useEffect(() => {
+    if (!user) return;
+    const pPath = `artifacts/${appId}/users/${user.uid}/health`;
+    return onValue(ref(db, pPath), (snapshot) => {
+      const data = snapshot.val() ? Object.values(snapshot.val()) : [];
+      setHealthEntries(data.sort((a, b) => b.createdAt - a.createdAt));
+      setLoading(false);
+    });
+  }, [user]);
 
-            <label className="flex items-center gap-2 text-sm text-gray-700 select-none">
-              <input type="checkbox" checked={apptAddToGCal} onChange={(e) => setApptAddToGCal(e.target.checked)} />
-              เพิ่มเข้า Google Calendar หลังบันทึก (แนะนำ)
-            </label>
-          </div>
-        ) : null}
+  if (loading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-indigo-600"/></div>;
 
-        {/* -------- งาน -------- */}
-        {addMode === "งาน" ? (
-          <div className="space-y-3">
-            <div>
-              <div className="text-xs text-gray-600 mb-1">ชื่องาน</div>
-              <Input value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} placeholder="เช่น ส่งงาน / ทำสไลด์" />
-            </div>
-
-            <div className="grid sm:grid-cols-2 gap-2">
-              <div>
-                <div className="text-xs text-gray-600 mb-1">ครบกำหนด</div>
-                <Input type="date" value={taskDue} onChange={(e) => setTaskDue(e.target.value)} />
-              </div>
-              <div>
-                <div className="text-xs text-gray-600 mb-1">ความสำคัญ</div>
-                <select
-                  value={taskPriority}
-                  onChange={(e) => setTaskPriority(e.target.value as Task["priority"])}
-                  className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm"
-                >
-                  <option value="ต่ำ">ต่ำ</option>
-                  <option value="กลาง">กลาง</option>
-                  <option value="สูง">สูง</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        ) : null}
-
-        {/* -------- โครงการ -------- */}
-        {addMode === "โครงการ" ? (
-          <div className="space-y-3">
-            <div>
-              <div className="text-xs text-gray-600 mb-1">ชื่อโครงการ</div>
-              <Input value={projName} onChange={(e) => setProjName(e.target.value)} placeholder="ชื่อโครงการ" />
-            </div>
-
-            <div className="grid sm:grid-cols-2 gap-2">
-              <div>
-                <div className="text-xs text-gray-600 mb-1">งบประมาณ (บาท)</div>
-                <Input type="number" value={projBudget} onChange={(e) => setProjBudget(Number(e.target.value))} placeholder="0" />
-              </div>
-              <div>
-                <div className="text-xs text-gray-600 mb-1">ไตรมาส (เลือกได้หลายอัน)</div>
-                <div className="flex flex-wrap gap-2">
-                  {(["Q1", "Q2", "Q3", "Q4"] as const).map((q) => {
-                    const active = projQuarters.includes(q);
-                    return (
-                      <Pill
-                        key={q}
-                        active={active}
-                        onClick={() => {
-                          setProjQuarters((prev) => {
-                            if (prev.includes(q)) {
-                              const next = prev.filter((x) => x !== q);
-                              return next.length ? next : ["Q1"];
-                            }
-                            return [...prev, q];
-                          });
-                        }}
-                      >
-                        {q}
-                      </Pill>
-                    );
-                  })}
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {healthEntries.map(entry => (
+          <div key={entry.id} className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col gap-4">
+             <div className="flex justify-between items-start">
+                <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center text-2xl">
+                  {entry.moodLevel >= 4 ? "😊" : entry.moodLevel === 3 ? "🙂" : "😣"}
                 </div>
-              </div>
-            </div>
-
-            <div>
-              <div className="text-xs text-gray-600 mb-1">เป้าหมาย</div>
-              <Input value={projTarget} onChange={(e) => setProjTarget(e.target.value)} placeholder="เช่น บุคลากรทุกคน" />
-            </div>
-
-            <div className="rounded-2xl border bg-white p-3">
-              <div className="font-medium text-gray-900 mb-2">กิจกรรมที่ต้องทำ (Task ของโครงการ)</div>
-              <div className="flex gap-2">
-                <Input
-                  value={projTaskDraft}
-                  onChange={(e) => setProjTaskDraft(e.target.value)}
-                  placeholder="พิมพ์รายการ แล้วกด +"
-                />
-                <button
-                  type="button"
-                  className="rounded-2xl bg-black text-white px-4 hover:bg-black/90"
-                  onClick={() => {
-                    const t = projTaskDraft.trim();
-                    if (!t) return;
-                    setProjTasksDraft((p) => [...p, { id: uid("ptask"), title: t, done: false }]);
-                    setProjTaskDraft("");
-                  }}
-                >
-                  +
-                </button>
-              </div>
-
-              <div className="mt-3 space-y-2">
-                {projTasksDraft.length === 0 ? (
-                  <div className="text-sm text-gray-500">ยังไม่มีรายการกิจกรรม</div>
-                ) : (
-                  projTasksDraft.map((t) => (
-                    <div key={t.id} className="flex items-center justify-between rounded-xl bg-gray-50 p-2">
-                      <button
-                        type="button"
-                        className="text-left"
-                        onClick={() =>
-                          setProjTasksDraft((prev) =>
-                            prev.map((x) => (x.id === t.id ? { ...x, done: !x.done } : x))
-                          )
-                        }
-                      >
-                        <div className={t.done ? "line-through text-gray-400" : "text-gray-900"}>{t.title}</div>
-                      </button>
-                      <button
-                        type="button"
-                        className="text-sm text-gray-500 hover:underline"
-                        onClick={() => setProjTasksDraft((prev) => prev.filter((x) => x.id !== t.id))}
-                      >
-                        ลบ
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
+                <p className="text-[10px] font-black text-slate-300">{entry.date}</p>
+             </div>
+             <p className="text-sm text-slate-700 font-bold leading-relaxed italic">"{entry.story}"</p>
+             {entry.aiResponse && (
+               <div className="p-4 bg-indigo-50/50 rounded-2xl border border-dashed border-indigo-100">
+                  <p className="text-[10px] font-black text-indigo-600 mb-1 uppercase tracking-widest italic">พี่พร้อมบอกว่า...</p>
+                  <p className="text-xs text-slate-600 leading-relaxed">{entry.aiResponse}</p>
+               </div>
+             )}
           </div>
-        ) : null}
+        ))}
+      </div>
+    </div>
+  );
+};
 
-        {/* -------- โน้ต -------- */}
-        {addMode === "โน้ต" ? (
-          <div className="space-y-3">
-            <div>
-              <div className="text-xs text-gray-600 mb-1">หัวข้อโน้ต</div>
-              <Input value={noteTitle} onChange={(e) => setNoteTitle(e.target.value)} placeholder="หัวข้อโน้ต" />
-            </div>
+// --- 3. ส่วนหลักของแอป (App Component) ---
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState("work");
+  const [addOpen, setAddOpen] = useState(false);
+  const [addMode, setAddMode] = useState("นัด");
 
-            <div>
-              <div className="text-xs text-gray-600 mb-1">รายละเอียด</div>
-              <Textarea rows={6} value={noteContent} onChange={(e) => setNoteContent(e.target.value)} placeholder="พิมพ์สิ่งที่อยากจดไว้..." />
-            </div>
+  // 1. จัดการสิทธิ์การเข้าถึงจ๊ะ
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (err) { console.error("Auth Error", err); }
+    };
+    initAuth();
+    return onAuthStateChanged(auth, (u) => {
+      if (u) {
+        setUser(u);
+        setLoading(false);
+      }
+    });
+  }, []);
 
-            <div className="text-xs text-gray-600 mb-1">สีโน้ต</div>
-            <div className="flex flex-wrap gap-2">
-              {["orange-100", "yellow-100", "emerald-100", "sky-100", "violet-100"].map((c) => (
-                <Pill key={c} active={noteColor === c} onClick={() => setNoteColor(c)}>
-                  {c}
-                </Pill>
-              ))}
-            </div>
+  // 2. ฟังก์ชันบันทึกข้อมูลแบบรวมศูนย์จ๊ะ
+  const handleAddSubmit = async (e) => {
+    e.preventDefault();
+    if (!user) return;
+
+    const fd = new FormData(e.currentTarget);
+    const data = Object.fromEntries(fd.entries());
+    const id = Date.now().toString();
+    const collectionMap = {
+      "นัด": "appointments",
+      "งาน": "todos",
+      "โน้ต": "notes",
+      "สุขภาพ": "health"
+    };
+    const collectionName = collectionMap[addMode] || "others";
+    const path = `artifacts/${appId}/users/${user.uid}/${collectionName}/${id}`;
+
+    try {
+      await set(ref(db, path), {
+        ...data,
+        id,
+        createdAt: Date.now(),
+        date: new Date().toLocaleDateString('th-TH')
+      });
+      setAddOpen(false);
+    } catch (e) {
+      alert("บันทึกไม่สำเร็จจ๊ะ ลองใหม่อีกครั้งนะจ๊ะ");
+    }
+  };
+
+  if (loading) return (
+    <div className="h-screen flex items-center justify-center bg-[#FDFCFB]">
+      <Loader2 className="animate-spin text-indigo-600 w-10 h-10" />
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-[#FDFCFB] font-sans text-left pb-32">
+      <Header user={user} />
+
+      <main className="mx-auto max-w-4xl px-6 pt-8">
+        <h2 className="text-3xl font-black text-slate-800 mb-8 capitalize underline decoration-indigo-200 decoration-8 font-serif">
+          {tab === "work" ? "งานประจำวัน" : tab === "memo" ? "บันทึกโน้ต" : tab === "finance" ? "แผนการเงิน" : "ดูแลสุขภาพใจ"}
+        </h2>
+        
+        {tab === "work" && <WorkTab />}
+        {tab === "memo" && <MemoTab />}
+        {tab === "finance" && <FinanceTab />}
+        {tab === "health" && <HealthTab user={user} />}
+      </main>
+
+      <BottomNav tab={tab} setTab={setTab} onAdd={() => { setAddMode(tab === "health" ? "สุขภาพ" : tab === "memo" ? "โน้ต" : "นัด"); setAddOpen(true); }} />
+
+      {/* Modal เพิ่มรายการใหม่ (รวมไฟล์เดียวจ๊ะ) */}
+      {addOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/80 backdrop-blur-md p-4 overflow-y-auto text-left">
+          <div className="bg-white w-full max-w-lg rounded-[3.5rem] p-10 relative shadow-2xl my-auto animate-in zoom-in duration-300">
+            <button onClick={() => setAddOpen(false)} className="absolute top-10 right-10 text-slate-300 hover:text-indigo-600 p-2"><X size={22}/></button>
+            <h3 className="text-2xl font-black text-slate-800 mb-6 font-serif">บันทึก{addMode}</h3>
+            
+            <form onSubmit={handleAddSubmit} className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">หัวข้อเรื่องจ๊ะ</label>
+                <input name="title" required placeholder="พิมพ์สิ่งที่ต้องการบันทึก..." className="w-full bg-slate-50 border-none rounded-2xl px-6 py-4 text-sm font-bold shadow-inner outline-none focus:ring-2 focus:ring-indigo-100" />
+              </div>
+
+              {addMode === "สุขภาพ" ? (
+                <div className="space-y-4">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">เล่าให้พี่พร้อมฟังหน่อยจ๊ะ</label>
+                  <textarea name="story" required placeholder="วันนี้เป็นยังไงบ้าง..." className="w-full bg-slate-50 border-none rounded-2xl px-6 py-4 text-sm font-medium shadow-inner h-32 outline-none focus:ring-2 focus:ring-indigo-100"></textarea>
+                  <input type="hidden" name="moodLevel" value="3" />
+                </div>
+              ) : (
+                <div className="space-y-2">
+                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">รายละเอียดเพิ่มเติม</label>
+                   <textarea name="content" placeholder="พิมพ์โน้ตเสริมจ๊ะ..." className="w-full bg-slate-50 border-none rounded-2xl px-6 py-4 text-sm font-medium shadow-inner h-24 outline-none focus:ring-2 focus:ring-indigo-100"></textarea>
+                </div>
+              )}
+
+              <button type="submit" className="w-full bg-slate-900 text-white font-black py-5 rounded-[2rem] shadow-xl hover:bg-black active:scale-95 transition-all mt-4">
+                ยืนยันบันทึกจ๊ะ
+              </button>
+            </form>
           </div>
-        ) : null}
-
-        {/* -------- บัญชี -------- */}
-        {addMode === "บัญชี" ? (
-          <div className="space-y-3">
-            <div className="grid sm:grid-cols-2 gap-2">
-              <div>
-                <div className="text-xs text-gray-600 mb-1">วันที่</div>
-                <Input type="date" value={finDate} onChange={(e) => setFinDate(e.target.value)} />
-              </div>
-              <div>
-                <div className="text-xs text-gray-600 mb-1">ประเภท</div>
-                <select
-                  value={finType}
-                  onChange={(e) => setFinType(e.target.value as FinanceItem["type"])}
-                  className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm"
-                >
-                  <option value="รายรับ">รายรับ</option>
-                  <option value="รายจ่าย">รายจ่าย</option>
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <div className="text-xs text-gray-600 mb-1">รายการ</div>
-              <Input value={finTitle} onChange={(e) => setFinTitle(e.target.value)} placeholder="เช่น ค่ากาแฟ / เงินเดือน" />
-            </div>
-
-            <div className="grid sm:grid-cols-2 gap-2">
-              <div>
-                <div className="text-xs text-gray-600 mb-1">จำนวนเงิน</div>
-                <Input type="number" value={finAmount} onChange={(e) => setFinAmount(Number(e.target.value))} />
-              </div>
-              <div>
-                <div className="text-xs text-gray-600 mb-1">ความจำเป็น</div>
-                <select
-                  value={finNecessity}
-                  onChange={(e) => setFinNecessity(e.target.value as FinanceItem["necessity"])}
-                  className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm"
-                >
-                  <option value="จำเป็น">จำเป็น</option>
-                  <option value="ฟุ่มเฟือย">ฟุ่มเฟือย</option>
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <div className="text-xs text-gray-600 mb-1">หมวดหมู่</div>
-              <Input value={finCategory} onChange={(e) => setFinCategory(e.target.value)} placeholder="เช่น อาหาร / เดินทาง" />
-            </div>
-
-            <div>
-              <div className="text-xs text-gray-600 mb-1">หมายเหตุ</div>
-              <Textarea rows={3} value={finNote} onChange={(e) => setFinNote(e.target.value)} placeholder="โน้ตเพิ่มเติม (ถ้ามี)" />
-            </div>
-          </div>
-        ) : null}
-
-        {/* -------- สุขภาพ -------- */}
-        {addMode === "สุขภาพ" ? (
-          <div className="space-y-3">
-            <div>
-              <div className="text-xs text-gray-600 mb-1">วันที่</div>
-              <Input type="date" value={hDate} onChange={(e) => setHDate(e.target.value)} />
-            </div>
-
-            <div className="grid sm:grid-cols-2 gap-2">
-              <div>
-                <div className="text-xs text-gray-600 mb-1">ก้าว (steps)</div>
-                <Input type="number" value={hSteps} onChange={(e) => setHSteps(Number(e.target.value))} />
-              </div>
-              <div>
-                <div className="text-xs text-gray-600 mb-1">นอน (ชั่วโมง)</div>
-                <Input type="number" value={hSleep} onChange={(e) => setHSleep(Number(e.target.value))} />
-              </div>
-            </div>
-
-            <div className="grid sm:grid-cols-2 gap-2">
-              <div>
-                <div className="text-xs text-gray-600 mb-1">น้ำ (แก้ว)</div>
-                <Input type="number" value={hWater} onChange={(e) => setHWater(Number(e.target.value))} />
-              </div>
-              <div>
-                <div className="text-xs text-gray-600 mb-1">ชา/กาแฟ (แก้ว)</div>
-                <Input type="number" value={hTea} onChange={(e) => setHTea(Number(e.target.value))} />
-              </div>
-            </div>
-
-            <div className="text-sm font-medium text-gray-700">ระดับอารมณ์</div>
-            <div className="flex flex-wrap gap-2">
-              {[
-                { id: 5, label: "🤩", text: "Excited" },
-                { id: 4, label: "😊", text: "Happy" },
-                { id: 3, label: "🥱", text: "Tired" },
-                { id: 2, label: "🥲", text: "Cry" },
-                { id: 1, label: "😣", text: "Bad" },
-              ].map((m) => (
-                <Pill key={m.id} active={hMood === m.id} onClick={() => setHMood(m.id as 1 | 2 | 3 | 4 | 5)}>
-                  <span className="text-lg">{m.label}</span>
-                  <span className="ml-1">{m.text}</span>
-                </Pill>
-              ))}
-            </div>
-
-            <div>
-              <div className="text-xs text-gray-600 mb-1">เล่าอะไรสั้นๆ</div>
-              <Textarea
-                rows={3}
-                value={hDetail}
-                onChange={(e) => setHDetail(e.target.value)}
-                placeholder="เช่น วันนี้เหนื่อย / กินแป้งเยอะ / เดินเยอะ 😊"
-              />
-            </div>
-          </div>
-        ) : null}
-
-        <div className="mt-5 flex gap-2">
-          <button
-            onClick={() => {
-              setAddOpen(false);
-              resetForms();
-            }}
-            className="flex-1 rounded-2xl border border-gray-200 bg-white py-3 hover:bg-gray-50"
-            type="button"
-          >
-            ยกเลิก
-          </button>
-          <button
-            onClick={saveAdd}
-            className="flex-1 rounded-2xl bg-black text-white py-3 hover:bg-black/90"
-            type="button"
-          >
-            บันทึก
-          </button>
         </div>
-      </Modal>
+      )}
     </div>
   );
 }
