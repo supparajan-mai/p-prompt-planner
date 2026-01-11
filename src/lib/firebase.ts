@@ -19,29 +19,27 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const rtdb = getDatabase(app);
 
+/**
+ * เรียก OpenAI ผ่าน Netlify Function (ปลอดภัย - API Key ไม่รั่วไหล)
+ */
 export async function callOpenAI(prompt: string) {
-  const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
-  if (!apiKey) return "ไม่พบคีย์ AI จ๊ะ";
-
   try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`
+    const response = await fetch('/.netlify/functions/openai', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json' 
       },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: "คุณคือพี่พร้อม ผู้ช่วยที่อบอุ่น" },
-          { role: "user", content: prompt }
-        ]
-      })
+      body: JSON.stringify({ prompt })
     });
+
+    if (!response.ok) {
+      throw new Error('Function call failed');
+    }
+    
     const result = await response.json();
-    return result.choices[0].message.content;
+    return result.message || "พี่พร้อมขออภัย ระบบขัดข้องจ๊ะ";
   } catch (error) {
-    console.error("OpenAI Error:", error);
+    console.error('OpenAI Error:', error);
     return "พี่พร้อมขออภัย ระบบขัดข้องจ๊ะ";
   }
 }
