@@ -1,16 +1,42 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  X, Sparkles, Laugh, Quote, Ghost, IceCream, Rocket,
-  Zap, RefreshCw, Settings2, Check, Loader2, UserCircle
+  X, 
+  Sparkles, 
+  Laugh, 
+  Quote, 
+  Ghost, 
+  IceCream, 
+  Rocket,
+  Zap,
+  RefreshCw,
+  Settings2,
+  Check,
+  Loader2,
+  UserCircle
 } from 'lucide-react';
-// ดึงค่าจาก lib ส่วนกลางจ๊ะ
-import { auth, db as store } from '../lib/firebase'; 
-import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { initializeApp } from 'firebase/app';
+import { getAuth, onAuthStateChanged, signInAnonymously, signInWithCustomToken } from 'firebase/auth';
+import { getFirestore, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 
-const appId = 'p-prompt-planner';
+// --- 1. การตั้งค่าระบบ (Firebase Configuration) ---
+const firebaseConfig = typeof __firebase_config !== 'undefined' 
+  ? JSON.parse(__firebase_config) 
+  : {
+      apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyDKxHVKU9F36vD8_qgX00UfZNPCMiknXqM",
+      authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "p-prompt.firebaseapp.com",
+      databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || "https://p-prompt-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "p-prompt",
+      storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "p-prompt.firebasestorage.app",
+      messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "566289872852",
+      appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:566289872852:web:4ea11ccbe1c619fded0841"
+    };
 
-// URL สำหรับดึงข้อมูลจาก Google Sheets
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'p-prompt-planner';
+
+// URL สำหรับดึงข้อมูลจาก Google Sheets (Export as CSV)
 const SHEET_ID = "1LC1mBr7ZtAFamAf9zpqT20Cp5g8ySTx5XY1n_14HDDU";
 const SHEET_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
 
@@ -24,7 +50,7 @@ const RANDOM_ICONS = [
   <RefreshCw className="text-emerald-400" />
 ];
 
-export default function FunnyQuote() {
+export default function App() {
   const [user, setUser] = useState(null);
   const [isVisible, setIsVisible] = useState(false);
   const [quotes, setQuotes] = useState([]);
@@ -34,27 +60,50 @@ export default function FunnyQuote() {
   const [isSaving, setIsSaving] = useState(false);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
 
-  // 1. จัดการสิทธิ์การใช้งาน
+  // --- 2. การจัดการสิทธิ์ (Rule 3) ---
   useEffect(() => {
-    return onAuthStateChanged(auth, (u) => setUser(u));
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (err) {
+        console.error("Auth Error:", err);
+      }
+    };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, setUser);
+    return () => unsubscribe();
   }, []);
 
-  // 2. ดึงข้อมูลจาก Google Sheets
+  // --- 3. ดึงข้อมูลจาก Google Sheets (ปรับปรุงการดึงข้อมูลเพื่อรักษาบรรทัดใหม่) ---
   useEffect(() => {
     const fetchQuotes = async () => {
       try {
         const response = await fetch(SHEET_URL);
         const csvData = await response.text();
+        
+        /**
+         * ระบบ Parse CSV แบบแม่นยำสูง (Manual Parse):
+         * ช่วยให้สามารถเก็บ "ขึ้นบรรทัดใหม่" ที่อยู่ภายใน Cell ของ Google Sheets ได้จ๊ะ
+         */
         const fetchedQuotes = [];
         let currentRow = '';
         let inQuotes = false;
 
         for (let i = 0; i < csvData.length; i++) {
           const char = csvData[i];
-          if (char === '"') inQuotes = !inQuotes;
+          if (char === '"') inQuotes = !inQuotes; // ตรวจสอบว่าอยู่ในเครื่องหมายคำพูดไหม
+          
+          // ถ้าเจอการขึ้นบรรทัดใหม่ และไม่ได้อยู่ในเครื่องหมายคำพูด แสดงว่าเป็นจบแถว
           if ((char === '\n' || char === '\r') && !inQuotes) {
             if (currentRow.trim()) {
-              const cleaned = currentRow.trim().replace(/^"|"$/g, '').replace(/""/g, '"');
+              // ลบเครื่องหมายคำพูดครอบหัวท้าย และเปลี่ยน "" เป็น " ตามมาตรฐาน CSV
+              const cleaned = currentRow.trim()
+                .replace(/^"|"$/g, '')
+                .replace(/""/g, '"');
               fetchedQuotes.push(cleaned);
             }
             currentRow = '';
@@ -62,6 +111,7 @@ export default function FunnyQuote() {
             currentRow += char;
           }
         }
+        // เก็บแถวสุดท้าย
         if (currentRow.trim()) {
           fetchedQuotes.push(currentRow.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
         }
@@ -75,15 +125,16 @@ export default function FunnyQuote() {
         setQuotes(["ถ้าหัวใจคุณยังว่าง\nลองมาวางแผนงานกับพี่พร้อมดูไหมจ๊ะ"]); 
       }
     };
+
     fetchQuotes();
   }, []);
 
-  // 3. ตรวจสอบเงื่อนไขการแสดงผล
+  // --- 4. ตรวจสอบเงื่อนไขการแสดงผลอัตโนมัติ ---
   useEffect(() => {
     if (!user || !isDataLoaded) return;
 
     const checkAndShow = async () => {
-      const configRef = doc(store, 'artifacts', appId, 'users', user.uid, 'settings', 'funny_quote_config');
+      const configRef = doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'funny_quote_config');
       const snap = await getDoc(configRef);
       
       let userConfig = { frequency: 'always', lastShown: 0 };
@@ -127,7 +178,7 @@ export default function FunnyQuote() {
   const updateFrequency = async (newFreq) => {
     if (!user) return;
     setIsSaving(true);
-    const configRef = doc(store, 'artifacts', appId, 'users', user.uid, 'settings', 'funny_quote_config');
+    const configRef = doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'funny_quote_config');
     const newConfig = { ...config, frequency: newFreq };
     
     try {
@@ -145,12 +196,14 @@ export default function FunnyQuote() {
   if (!isVisible && !showSettings) return null;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300 text-left">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-300">
       <div className="w-full max-w-sm bg-white rounded-[3.5rem] shadow-[0_40px_100px_rgba(0,0,0,0.15)] border border-slate-50 relative overflow-hidden animate-in zoom-in duration-500">
         
+        {/* Background Decos */}
         <div className="absolute -top-10 -right-10 w-40 h-40 bg-indigo-50 rounded-full blur-3xl opacity-60"></div>
         <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-rose-50 rounded-full blur-3xl opacity-60"></div>
 
+        {/* Top Controls */}
         <div className="absolute top-8 left-8 right-8 flex justify-between items-center z-20">
           <button 
             onClick={() => setShowSettings(!showSettings)}
@@ -207,6 +260,7 @@ export default function FunnyQuote() {
                 <Quote size={40} className="fill-indigo-600 text-indigo-600" />
               </div>
 
+              {/* ส่วนแสดงผลคำคม: ใช้ whitespace-pre-wrap เพื่อรองรับการขึ้นบรรทัดใหม่ตามที่พิมพ์ไว้จ๊ะ */}
               <div className="min-h-[100px] flex items-center justify-center px-2 text-left">
                 <h3 className="text-lg font-black text-slate-800 leading-relaxed italic whitespace-pre-wrap">
                   "{currentQuote.text}"
@@ -231,6 +285,7 @@ export default function FunnyQuote() {
             </div>
           )}
         </div>
+
         <div className="h-2 bg-gradient-to-r from-indigo-500 via-purple-500 to-rose-500 w-full"></div>
       </div>
     </div>
